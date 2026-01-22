@@ -1,18 +1,18 @@
-import { View, Text, StyleSheet, Image } from "react-native";
+import { View, StyleSheet, Image } from "react-native";
 import { useEffect } from "react";
 
 export default function SplashScreen({ navigation }) {
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigation.replace("Home");
-    }, 10000); // 10 seconds
+      navigation.replace("Signup");
+    }, 5000);
 
     return () => clearTimeout(timer);
   }, []);
 
   return (
     <View style={styles.container}>
-      <Image source={{ uri: "https://reactnative.dev/img/tiny_logo.png" }} style={{ width: 64, height: 64 }} />
+      <Image source={{ uri: "https://reactnative.dev/img/tiny_logo.png" }} style={styles.image} />
     </View>
   );
 }
@@ -24,9 +24,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#0f172a",
   },
-  text: {
-    color: "white",
-    fontSize: 24,
-    fontWeight: "600",
-  },
+  image: {
+    width: 64,
+    height: 64,
+  }
 });
