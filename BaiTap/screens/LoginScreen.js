@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { View, Text, StyleSheet, TextInput, Button } from "react-native";
 import { axiosInstance } from "../lib/axios";
+import { useAuth } from "../context/authContext.js";
 import Toast from "react-native-toast-message";
 
 export default function LoginScreen({ navigation }) {
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
+    const {setAuthUser} = useAuth();
     const [formData, setFormData] = useState({
         email: "",
         password: ""
@@ -13,7 +13,8 @@ export default function LoginScreen({ navigation }) {
     
     const login = async (data) => {
         try {
-            const res = await axiosInstance.post("/auth/login", data);
+            const res = await axiosInstance.post("/auth/login-jwt", data);
+            setAuthUser(res.data);
             Toast.show({
                 type: 'success',
                 text1: 'Login successful.'
@@ -23,18 +24,13 @@ export default function LoginScreen({ navigation }) {
         catch (error) {
             Toast.show({
                 type: 'error',
-                text1: res.error.response.data.message
+                text1: error.response.data.message
             });
         }
     }
 
     const handleLogin = (e) => {
         e.preventDefault();
-        const formData = {
-            email: email,
-            password: password
-        };
-        setFormData(formData);
 
         login(formData);
     }
@@ -42,11 +38,12 @@ export default function LoginScreen({ navigation }) {
   return (
     <View style={styles.container}>
         <Text style={styles.text}>Login Screen</Text>  
-        <TextInput autoCapitalize="none" placeholder="Email" style={styles.textinput} onChangeText={setEmail}/>
-        <TextInput autoCapitalize="none" placeholder="Password" style={styles.textinput} secureTextEntry={true} onChangeText={setPassword}/>
+        <TextInput autoCapitalize="none" placeholder="Email" style={styles.textinput} onChangeText={(text) => setFormData({...formData, email: text})}/>
+        <TextInput autoCapitalize="none" placeholder="Password" style={styles.textinput} secureTextEntry={true} onChangeText={(text) => setFormData({...formData, password: text})}/>
         <View style={styles.control}>
             <Button title="Login" onPress={handleLogin} />
             <Button title="Go to Signup" onPress={() => navigation.replace("Signup")} />
+            <Button title="Go to Home" onPress={() => navigation.replace("Home")} />
         </View>
         
     </View>
@@ -73,10 +70,10 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   control: {
-    margin: 12,
+    margin: 10,
     alignContent: "space-between",
     flexDirection: "row",
     justifyContent: "space-between",
-    width: "60%"
+    width: "90%"
   }
 });
