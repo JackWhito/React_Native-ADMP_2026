@@ -45,7 +45,9 @@ export default function LoginScreen({ navigation }) {
             <Button title="Go to Signup" onPress={() => navigation.replace("Signup")} />
             <Button title="Go to Home" onPress={() => navigation.replace("Home")} />
         </View>
-        
+        <View style={styles.control}>
+            <Button title="Forget Password" onPress={() => navigation.navigate("ForgetPassword")} style={styles.button} />
+        </View>
     </View>
     );
 }

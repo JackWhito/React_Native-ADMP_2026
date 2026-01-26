@@ -1,4 +1,7 @@
 import User from "../models/user.model.js";
+import bcrypt from "bcryptjs";
+import { generateOTP, sendOTPEmail } from "../lib/email.js";
+import { genToken } from "../lib/utils.js";
 
 export const signup = async (req, res) => {
     const {fullName, email, password} = req.body
@@ -62,9 +65,6 @@ export const login = async (req, res) => {
     }
 };
 
-import bcrypt from "bcryptjs";
-import { genToken } from "../lib/utils.js";
-
 export const signupJWT = async (req, res) => {
     const {fullName, email, password} = req.body
     try{
@@ -79,22 +79,28 @@ export const signupJWT = async (req, res) => {
 
         if(user) return res.status(400).json({message: "Email have already exists"});
 
+        const otp = generateOTP();
+
         const salt = await bcrypt.genSalt(10)
         const hashedPass = await bcrypt.hash(password, salt)
 
         const newUser = new User({
             fullName,
             email,
-            password: hashedPass
-        })
+            password: hashedPass,
+            otp,
+            otpExpiry: Date.now() + 5 * 60 * 1000 ,
+            isVerified: false
+        });
 
         if(newUser) {
-            genToken(newUser._id, res)
             await newUser.save();
+            await sendOTPEmail(email, otp);
             res.status(201).json({
                 _id: newUser._id,
                 fullName: newUser.fullName,
-                email: newUser.email
+                email: newUser.email,
+                message: "Signup successful, OTP sent to email"
             })
         } else {
             res.status(400).json({message:"Invalid user data"});
@@ -116,6 +122,10 @@ export const loginJWT = async (req, res) => {
         const isPassCorrect = await bcrypt.compare(password,user.password);
         if(!isPassCorrect){
             return res.status(400).json({message:"Invalid credentials"});
+        }
+
+        if(!user.isVerified){
+            return res.status(400).json({message:"Email not verified"});
         }
 
         genToken(user._id, res)
@@ -145,5 +155,106 @@ export const checkAuth = (req, res) => {
     } catch (error) {
         console.log("Error in checkAuth controller", error.message);
         res.status(500).json({message:"Internal Server Error"})
+    }
+};
+
+export const verifyOTP = async (req, res) => {
+    try{
+        const {email, otp} = req.body;
+        const user = await User.findOne({email});
+
+        if(!user){
+            return res.status(400).json({message:"Invalid user"});
+        }
+
+        if(user.isVerified){
+            return res.status(400).json({message:"User already verified"});
+        }
+
+        if(user.otp !== otp || user.otpExpiry < Date.now()){
+            return res.status(400).json({message:"Invalid or expired OTP"});
+        }
+
+        user.isVerified = true;
+        user.otp = undefined;
+        user.otpExpiry = undefined;
+        await user.save();
+
+        genToken(user._id, res);
+
+        res.status(200).json({
+            _id:user._id,
+            fullName: user.fullName,
+            email: user.email
+        })
+    } catch(error){
+        console.log("Error in verifyOTP controller", error.message);
+        res.status(500).json({message:"Internal Server Error"});
+    }
+};
+
+export const resendOTP = async (req, res) => {
+    try{
+        const {email} = req.body;
+        const user = await User.findOne({email});
+
+        if(!user){
+            return res.status(400).json({message:"Invalid user"});
+        }
+        if(user.isVerified){
+            return res.status(400).json({message:"User already verified"});
+        }   
+        const otp = generateOTP();
+        user.otp = otp;
+        user.otpExpiry = Date.now() + 5 * 60 * 1000 ;
+        await user.save()
+        await sendOTPEmail(email, otp);
+
+        res.status(200).json({message:"OTP resent to email"});
+    } catch(error){
+        console.log("Error in resendOTP controller", error.message);
+        res.status(500).json({message:"Internal Server Error"});
+    }
+};
+
+export const forgotPassword = async (req, res) => {
+    try{
+        const {email} = req.body;
+        const user = await User.findOne({email});
+        if(!user){
+            return res.status(400).json({message:"Invalid user"});
+        }
+        user.isVerified = false;
+        const otp = generateOTP();
+        user.otp = otp;
+        user.otpExpiry = Date.now() + 5 * 60 * 1000 ;
+        await user.save()
+        await sendOTPEmail(email, otp); 
+        res.status(200).json({message:"OTP sent to email"});
+    } catch(error){
+        console.log("Error in forgotPassword controller", error.message);
+        res.status(500).json({message:"Internal Server Error"});
+    }
+};
+
+export const resetPassword = async (req, res) => {
+    try{
+        const {userId, newPassword} = req.body;
+        const user = await User.findById(userId);
+        if(!user){
+            return res.status(400).json({message:"Invalid user"});
+        }
+        const salt = await bcrypt.genSalt(10)
+        const hashedPass = await bcrypt.hash(newPassword, salt)
+        user.password = hashedPass;
+        await user.save();
+        res.status(200).json({
+            _id:user._id,
+            fullName: user.fullName,
+            email: user.email
+        });
+    } catch(error){
+        console.log("Error in resetPassword controller", error.message);
+        res.status(500).json({message:"Internal Server Error"});
     }
 };

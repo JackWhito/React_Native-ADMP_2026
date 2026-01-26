@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, Button } from "react-native";
 import { useAuth } from "../context/authContext.js";
-import { useEffect } from "react";
+import { use, useEffect } from "react";
 import Toast from "react-native-toast-message";
 import { axiosInstance } from "../lib/axios";
 
@@ -9,6 +9,9 @@ export default function HomeScreen({ navigation }) {
 
   useEffect(() => {
     checkAuth();
+    if (!authUser) {
+      navigation.replace("Login");
+    }
   }, [checkAuth]);
 
   const handleLogout = async () => {
@@ -28,10 +31,6 @@ export default function HomeScreen({ navigation }) {
       });
     }
   };
-  
-  if (!authUser) {
-    navigation.replace("Login");
-  }
   return (
     <View style={styles.container}>
       <Text style={styles.text}>Đoàn Nguyễn Nam Trung</Text>

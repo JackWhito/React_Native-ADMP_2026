@@ -29,7 +29,7 @@ export default function SignupScreen({ navigation }) {
                 type: 'success',
                 text1: 'Signup successful.'
             });
-            navigation.replace("Home");
+            navigation.replace("Verify", {email: res.data.email});
         }
         catch (error) {
             Toast.show({
@@ -56,6 +56,9 @@ export default function SignupScreen({ navigation }) {
         <View style={styles.control}>
             <Button title="Sign Up" onPress={handleSignup} />
             <Button title="Go to Login" onPress={() => navigation.replace("Login")} style={styles.button} />
+        </View>
+        <View style={styles.control}>
+            <Button title="Forget Password" onPress={() => navigation.navigate("ForgetPassword")} style={styles.button} />
         </View>
     </View>
     );
