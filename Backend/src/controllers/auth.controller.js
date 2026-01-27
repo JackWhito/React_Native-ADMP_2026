@@ -128,15 +128,17 @@ export const loginJWT = async (req, res) => {
             return res.status(400).json({message:"Email not verified"});
         }
 
-        genToken(user._id, res)
+        const token = genToken(user._id, user.role)
 
         res.status(200).json({
             _id:user._id,
             fullName: user.fullName,
-            email: user.email
+            email: user.email,
+            role: user.role,
+            token
         })
     } catch (error) {
-        console.log("Error in login controller", error.message);
+        console.log("Error in loginJWT controller", error.message);
         res.status(500).json({message:"Internal Server Error"});
     }
 };
@@ -180,7 +182,7 @@ export const verifyOTP = async (req, res) => {
         user.otpExpiry = undefined;
         await user.save();
 
-        genToken(user._id, res);
+        genToken(user._id,"user", res);
 
         res.status(200).json({
             _id:user._id,

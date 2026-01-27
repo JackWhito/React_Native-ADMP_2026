@@ -4,14 +4,13 @@ import { useEffect } from "react";
 import Toast from "react-native-toast-message";
 import { axiosInstance } from "../lib/axios";
 
-export default function HomeScreen({ navigation }) {
-  const { authUser, checkAuth, setAuthUser } = useAuth();
+export default function AdminCheckScreen({ navigation }) {
+  const { authUser, isAdmin, checkAuth, setAuthUser } = useAuth();
 
   useEffect(() => {
     checkAuth();
-    if (!authUser) {
-      console.log("User is not authenticated, redirecting to Login");
-      navigation.replace("Login");
+    if (!isAdmin) {
+      console.log("User is not admin, redirecting to Home");
     }
   }, [checkAuth]);
 
@@ -35,15 +34,12 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Đoàn Nguyễn Nam Trung</Text>
-      <Text style={styles.text}>Mã số sinh viên: 21110333</Text>
-      <Text style={styles.text}>Nhóm: 04</Text>
-      <Text style={styles.text}>Đề tài: Xây dựng app Discord</Text>
       
-      <Text style={styles.text}>Welcome, {authUser?.fullName}! {authUser?.role}</Text>
+      <Text style={styles.text}>Welcome, Endministrator {authUser?.fullName}!</Text>
+      <Text style={styles.text}>You have {authUser?.role} access.</Text>
       <View style={styles.control}>
         <Button title="Logout" onPress={handleLogout} />
-        <Button title="Check for admin role" onPress={() => navigation.navigate("AdminCheck")} />
+        <Button title="Go to Home" onPress={() => navigation.navigate("Home")} />
       </View>
     </View>
   );

@@ -1,13 +1,13 @@
 import jwt from "jsonwebtoken"
-export const genToken=(userID, res) => {
-    const token = jwt.sign({userID}, process.env.JWT_SECRET, {
-        expiresIn:"1d"
-    });
-    res.cookie("jwt", token, {
-        maxAge: 24 * 60 * 60 * 1000,
-        sameSite: "strict",
-        secure: process.env.NODE_ENV !== "development"
-    });
+export const genToken=(userID, role, res) => {
+    if(!role || (role !== "user" && role !== "admin")){
+        throw new Error("Invalid role provided for token generation");
+    }
+    const payload = {userID, role};
+    const expiresIn = role === "admin" ? "12h" : "1d";
 
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {
+        expiresIn
+    });
     return token;
 };

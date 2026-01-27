@@ -1,20 +1,21 @@
 import express from "express";
 import {login, logout, signup, signupJWT, loginJWT, checkAuth, verifyOTP, forgotPassword, resendOTP, resetPassword} from "../controllers/auth.controller.js";
-import { protectRoute } from "../middleware/auth.middleware.js";
+import { protectRoute, apiLimiter, adminOnly } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-router.post("/signup", signup);
-router.post("/login", login);
-router.post("/signup-jwt", signupJWT);
-router.post("/login-jwt", loginJWT);
+router.post("/signup", apiLimiter, signup);
+router.post("/login", apiLimiter, login);
+router.post("/signup-jwt", apiLimiter, signupJWT);
+router.post("/login-jwt", apiLimiter, loginJWT);
 router.post("/logout", logout);
-router.post("/verify-otp", verifyOTP);
+router.post("/verify-otp", apiLimiter, verifyOTP);
 
-router.post("/forget-password", forgotPassword);
-router.post("/reset-password", resetPassword);
-router.post("/resend-otp", resendOTP);
+router.post("/forget-password", apiLimiter, forgotPassword);
+router.post("/reset-password", apiLimiter, resetPassword);
+router.post("/resend-otp", apiLimiter, resendOTP);
 
 router.get("/check", protectRoute, checkAuth);
+router.post("/admin",protectRoute, adminOnly, checkAuth);
 
 export default router;

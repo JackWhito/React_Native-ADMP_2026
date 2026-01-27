@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TextInput, Button } from "react-native";
 import { axiosInstance } from "../lib/axios";
 import Toast from "react-native-toast-message";
@@ -9,16 +9,27 @@ export default function SignupScreen({ navigation }) {
         email: "",
         password: ""
     });
-
-
     const validateForm = () => {
-        if(!formData.fullName || !formData.email || !formData.password) {
-            Toast.show({
-                type: 'error',
-                text1: 'All fields are required.'
-            });
-            return false;
-        }
+        if(!formData.fullName.trim()) return Toast.show({
+            type: 'error',
+            text1: 'Full name is required.'
+        });
+        if(!formData.email.trim()) return Toast.show({
+            type: 'error',
+            text1: 'Email is required.'
+        });
+        if(!formData.password.trim()) return Toast.show({
+            type: 'error',
+            text1: 'Password is required.'
+        });
+        if(!/\S+@\S+\.\S+/.test(formData.email)) return Toast.show({
+            type: 'error',
+            text1: 'Email is invalid.'
+        });
+        if(formData.password.length < 6) return Toast.show({
+            type: 'error',
+            text1: 'Password must be at least 6 characters.'
+        });
         return true;
     }
     

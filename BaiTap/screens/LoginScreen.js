@@ -2,6 +2,7 @@ import { useState } from "react";
 import { View, Text, StyleSheet, TextInput, Button } from "react-native";
 import { axiosInstance } from "../lib/axios";
 import { useAuth } from "../context/authContext.js";
+import * as SecureStore from 'expo-secure-store';
 import Toast from "react-native-toast-message";
 
 export default function LoginScreen({ navigation }) {
@@ -10,10 +11,30 @@ export default function LoginScreen({ navigation }) {
         email: "",
         password: ""
     });
+    const validateForm = () => {
+        if(!formData.email.trim()) return Toast.show({
+            type: 'error',
+            text1: 'Email is required.'
+        });
+        if(!formData.password.trim()) return Toast.show({
+            type: 'error',
+            text1: 'Password is required.'
+        });
+        if(!/\S+@\S+\.\S+/.test(formData.email)) return Toast.show({
+            type: 'error',
+            text1: 'Email is invalid.'
+        });
+        if(formData.password.length < 6) return Toast.show({
+            type: 'error',
+            text1: 'Password must be at least 6 characters.'
+        });
+        return true;
+    }
     
     const login = async (data) => {
         try {
             const res = await axiosInstance.post("/auth/login-jwt", data);
+            await SecureStore.setItemAsync('token', res.data.token);
             setAuthUser(res.data);
             Toast.show({
                 type: 'success',
@@ -31,8 +52,8 @@ export default function LoginScreen({ navigation }) {
 
     const handleLogin = (e) => {
         e.preventDefault();
-
-        login(formData);
+        const isValid = validateForm();
+        if(isValid) login(formData);
     }
 
   return (
@@ -47,6 +68,7 @@ export default function LoginScreen({ navigation }) {
         </View>
         <View style={styles.control}>
             <Button title="Forget Password" onPress={() => navigation.navigate("ForgetPassword")} style={styles.button} />
+            <Button title="Admin Check" onPress={() => navigation.navigate("AdminCheck")} style={styles.button} />
         </View>
     </View>
     );

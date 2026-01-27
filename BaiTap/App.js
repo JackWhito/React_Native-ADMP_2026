@@ -9,6 +9,7 @@ import LoginScreen from "./screens/LoginScreen.js";
 import VerifyScreen from "./screens/VerifyScreen.js";
 import ForgetPasswordScreen from "./screens/ForgetPasswordScreen.js";
 import ResetPasswordScreen from "./screens/ResetPasswordScreen.js";
+import AdminCheckScreen from "./screens/AdminCheckScreen.js";
 import { AuthProvider } from "./context/authContext.js";
 
 const Stack = createNativeStackNavigator();
@@ -25,6 +26,7 @@ export default function App() {
         <Stack.Screen name="Verify" component={VerifyScreen} />
         <Stack.Screen name="ForgetPassword" component={ForgetPasswordScreen} />
         <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+        <Stack.Screen name="AdminCheck" component={AdminCheckScreen} />
       </Stack.Navigator>
       <Toast />
     </NavigationContainer>

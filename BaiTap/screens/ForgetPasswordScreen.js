@@ -10,6 +10,8 @@ export default function ForgetPassword({ navigation, route }) {
     const {setAuthUser} = useAuth();
     const handleVerify = async() => {
         try {
+            const isValid = validateForm();
+            if(!isValid) return;
             const res = await axiosInstance.post("/auth/verify-otp", {
                 email: email,
                 otp
@@ -47,6 +49,21 @@ export default function ForgetPassword({ navigation, route }) {
             });
         }
     };
+    const validateForm = () => {
+        if(!email.trim()) return Toast.show({
+            type: 'error',
+            text1: 'Email is required.'
+        });
+        if(!/\S+@\S+\.\S+/.test(email)) return Toast.show({
+            type: 'error',
+            text1: 'Email is invalid.'
+        });
+        if(!otp.trim()) return Toast.show({
+            type: 'error',
+            text1: 'OTP is required.'
+        });
+        return true;
+    }
 
   return (
     <View style={styles.container}>

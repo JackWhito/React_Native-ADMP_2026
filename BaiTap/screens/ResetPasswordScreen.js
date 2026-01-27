@@ -9,6 +9,8 @@ export default function ResetPassword({ navigation, route }) {
     const {setAuthUser} = useAuth();
     const handleResetPassword = async() => {
         try {
+            const isValid = validateForm();
+            if(!isValid) return;
             const res = await axiosInstance.post("/auth/reset-password", {
                 userId: route.params.userId,
                 newPassword
@@ -23,6 +25,17 @@ export default function ResetPassword({ navigation, route }) {
             console.log("Error in password reset:", error);
         }
     };
+    const validateForm = () => {
+        if(!newPassword.trim()) return Toast.show({
+            type: 'error',
+            text1: 'New password is required.'
+        });
+        if(newPassword.length < 6) return Toast.show({
+            type: 'error',
+            text1: 'Password must be at least 6 characters.'
+        });
+        return true;
+    }
 
   return (
     <View style={styles.container}>
