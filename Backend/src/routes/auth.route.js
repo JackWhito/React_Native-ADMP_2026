@@ -1,5 +1,5 @@
 import express from "express";
-import {login, logout, signup, signupJWT, loginJWT, checkAuth, verifyOTP, forgotPassword, resendOTP, resetPassword} from "../controllers/auth.controller.js";
+import {login, logout, signup, signupJWT, loginJWT, checkAuth, verifyOTP, forgotPassword, resendOTP, resetPassword, updateUser} from "../controllers/auth.controller.js";
 import { protectRoute, apiLimiter, adminOnly } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
@@ -17,5 +17,7 @@ router.post("/resend-otp", apiLimiter, resendOTP);
 
 router.get("/check", protectRoute, checkAuth);
 router.post("/admin",protectRoute, adminOnly, checkAuth);
+
+router.put("/update", apiLimiter, protectRoute, updateUser);
 
 export default router;

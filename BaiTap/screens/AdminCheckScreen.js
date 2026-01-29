@@ -1,10 +1,11 @@
 import { View, Text, Button } from "react-native";
 import { useAuth } from "../context/authContext.js";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Toast from "react-native-toast-message";
+import { getAuthUser } from "../db/authDB.js";
 
 export default function AdminCheckScreen({ navigation }) {
-  const { authUser, checkAuth } = useAuth();
+  const { checkAuth, authUser } = useAuth();
 
   useEffect(() => {
     checkAuth();

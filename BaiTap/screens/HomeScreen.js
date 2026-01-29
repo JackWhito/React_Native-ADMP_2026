@@ -1,9 +1,4 @@
-import { View, Text, StyleSheet, Button } from "react-native";
-import { useAuth } from "../context/authContext.js";
-import { useEffect } from "react";
-import Toast from "react-native-toast-message";
-import { publicAxiosInstance } from "../lib/axios";
-import * as SecureStore from "expo-secure-store";
+import { View, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ChatSidebar from "../components/ChatSideBar.js";

@@ -17,11 +17,11 @@ export default function MainTabs({navigation}) {
     if(!authUser) {
       Toast.show({
         type: 'error',
-        text1: 'Access denied.'
+        text1: 'Access to Main Tabs denied.'
       });
       navigation.replace("Login");
     }
-  }, []);
+  }, [checkAuth]);
   return (
       <Tab.Navigator
         screenOptions={({ route }) => ({

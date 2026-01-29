@@ -260,3 +260,26 @@ export const resetPassword = async (req, res) => {
         res.status(500).json({message:"Internal Server Error"});
     }
 };
+
+export const updateUser = async (req, res) => {
+    const {userId, fullName } = req.body
+    try {
+        const user = await User.findById(userId);
+        if(!user){
+            return res.status(400).json({message:"Invalid user"});
+        }
+        user.fullName = fullName
+        await user.save();
+        const token = genToken(user._id, user.role)
+        res.status(200).json({
+            _id:user._id,
+            fullName: user.fullName,
+            email: user.email,
+            role: user.role,
+            token
+        })
+    } catch (error) {       
+        console.log("Error in updateUser controller", error.message);
+        res.status(500).json({message:"Internal Server Error"});    
+    }
+};

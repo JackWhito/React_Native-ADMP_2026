@@ -8,6 +8,7 @@ import * as SecureStore from "expo-secure-store";
 import Toast from "react-native-toast-message";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import "../global.css"
+import { saveAuthUser } from "../db/authDB.js";
 
 export default function LoginScreen({ navigation }) {
     const {setAuthUser} = useAuth();
@@ -39,7 +40,8 @@ export default function LoginScreen({ navigation }) {
         try {
             const res = await publicAxiosInstance.post("/auth/login-jwt", data);
             await SecureStore.setItemAsync('token', res.data.token);
-            setAuthUser(res.data);
+            await setAuthUser(res.data);
+            await saveAuthUser(res.data);
             Toast.show({
                 type: 'success',
                 text1: 'Login successful.'

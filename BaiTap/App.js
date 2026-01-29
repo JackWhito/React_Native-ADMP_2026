@@ -13,17 +13,36 @@ import AdminCheckScreen from "./screens/AdminCheckScreen.js";
 import { AuthProvider } from "./context/authContext.js";
 import MainTabs from "./navigation/MainTabs.js";
 import ProfileScreen from "./screens/ProfileScreen.js";
-import { StatusBar } from "expo-status-bar";
-import { View } from "react-native";
+import Toast from "react-native-toast-message";
+import { View, ActivityIndicator } from "react-native";
+import { useEffect, useState } from "react";
+
+import { initAuthDB } from "./db/authDB.js";
+import UpdateProfile from "./screens/UpdateProfileScreen.js";
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  const [dbReady, setDbReady] = useState(false)
+  useEffect(() => {
+    (async () => {
+      try {
+        await initAuthDB();
+        setDbReady(true);
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, []);
+
+  if (!dbReady) {
+    return <ActivityIndicator />;
+  }
   return (
       <View style={{flex:1, backgroundColor:"#36393e"}}>
       <NavigationContainer>
       <AuthProvider>
-      <Stack.Navigator screenOptions={{ headerShown: false, animation:"fade" }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Signup" component={SignupScreen} />
@@ -33,8 +52,10 @@ export default function App() {
         <Stack.Screen name="AdminCheck" component={AdminCheckScreen} />
         <Stack.Screen name="MainTabs" component={MainTabs} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen name="Update" component={UpdateProfile} options={{animation:"slide_from_right"}} />
       </Stack.Navigator>
       </AuthProvider>
+      <Toast/>
     </NavigationContainer>
     </View>
   );

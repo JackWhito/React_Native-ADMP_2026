@@ -12,6 +12,7 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [authUser, setAuthUser] = useState(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [userSQL, setUserSQL] = useState(null);
 
   const checkAuth = async () => {
     try{
@@ -20,14 +21,15 @@ export const AuthProvider = ({ children }) => {
       const token = await SecureStore.getItemAsync('token');
 
       if (!token) {
-        const offlineUser = await getAuthUser();
-        setAuthUser(offlineUser);
+        setIsCheckingAuth(false); 
+        setAuthUser(null);
         return;
       }
 
       const res = await axiosInstance.get("/auth/check");
-      setAuthUser(res.data);
-      saveAuthUser(res.data);
+      await setAuthUser(res.data);
+      await saveAuthUser(res.data);
+      await setUserSQL(res.data);
     } catch (error) {
       console.log("Error in checkAuth:", error.response.data.message);
       setAuthUser(null);
@@ -39,6 +41,10 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     checkAuth();
+    (async () => {
+      const user = await getAuthUser();
+      setUserSQL(user);
+    })();
   }, []);
 
   return (
@@ -48,7 +54,9 @@ export const AuthProvider = ({ children }) => {
         isCheckingAuth,
         checkAuth,
         setAuthUser,
-        setIsCheckingAuth
+        setIsCheckingAuth,
+        userSQL,
+        setUserSQL
       }}
     >
       {children}
