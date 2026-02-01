@@ -1,6 +1,7 @@
 import express from "express";
-import {login, logout, signup, signupJWT, loginJWT, checkAuth, verifyOTP, forgotPassword, resendOTP, resetPassword, updateUser} from "../controllers/auth.controller.js";
+import {login, logout, signup, signupJWT, loginJWT, checkAuth, verifyOTP, forgotPassword, resendOTP, resetPassword, updateUser, updateEmail, updateProfile} from "../controllers/auth.controller.js";
 import { protectRoute, apiLimiter, adminOnly } from "../middleware/auth.middleware.js";
+import { upload } from "../middleware/upload.middleware.js";
 
 const router = express.Router();
 
@@ -19,5 +20,8 @@ router.get("/check", protectRoute, checkAuth);
 router.post("/admin",protectRoute, adminOnly, checkAuth);
 
 router.put("/update", apiLimiter, protectRoute, updateUser);
+router.put("/update-email", apiLimiter, protectRoute, updateEmail);
+
+router.put("/profile", apiLimiter, protectRoute, upload.single("avatar"), updateProfile)
 
 export default router;

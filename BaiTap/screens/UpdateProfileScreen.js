@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Pressable } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Image } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/authContext";
@@ -7,30 +7,56 @@ import { useEffect, useState } from "react";
 import {axiosInstance} from "../lib/axios.js"
 import Toast from "react-native-toast-message";
 
+import * as ImagePicker from "expo-image-picker";
+
+import { getAuthUser,saveAuthUser } from "../db/authDB.js";
 
 export default function UpdateProfile({navigation}) {
-    const [email, setEmail] = useState(null);
-    const [about, setAbout] = useState(null);
-    const [userUpdate, setUserUpdate] = useState({})
+    const [userSQL, setUserSQL] = useState(null);
+    const [image, setImage] = useState(null);
+    const [userUpdate, setUserUpdate] = useState({
+        userId:"",
+        fullName: "",
+        bio: "",
+        email:"",
+    });
     const {top} = useSafeAreaInsets();
-    const { checkAuth, setAuthUser, userSQL, setUserSQL } = useAuth();
+    const { checkAuth, setAuthUser, upload } = useAuth();
     useEffect(() => {
         checkAuth();
-        setUserUpdate(prev => ({...prev, userId: userSQL?._id}));
-        if (!userSQL) {
-        navigation.replace("Login");
-        }
+        (async () => {
+            const user = await getAuthUser();
+            setUserSQL(user);
+        })();
     }, []);
-    const update = async (data) => {
+    useEffect(() => {
+        if (!userSQL?._id) return;
+        setUserUpdate(prev => ({
+            ...prev,
+            userId: userSQL._id,
+        }));
+    }, [userSQL]);
+    const enable = userUpdate.fullName !== "" || userUpdate.bio !== ""|| userUpdate.email !== "";
+    const updateUser = async (data) => {
         try{
             const res = await axiosInstance.put("/auth/update",data)
-            setAuthUser(res.data);
             Toast.show({
                 type: 'success',
                 text1: "Update success"
             })
-            setUserSQL(res.data)
-            navigation.replace("MainTabs")
+            if(userUpdate.email !== "")
+            {
+                const Emaildata = {
+                    userId: userSQL?._id,
+                    email: userUpdate.email
+                }
+                await axiosInstance.put("/auth/update-email", Emaildata);
+            }
+            setAuthUser(res.data);
+            saveAuthUser(res.data);
+            if(userUpdate.email !=="")
+                navigation.replace("Verify",{email: res.data.email})
+            else navigation.replace("MainTabs")
         } catch (error) {
             Toast.show({
                 type: 'error',
@@ -38,14 +64,30 @@ export default function UpdateProfile({navigation}) {
             });
         }
     }
+
     const handleSave = async (e) => {
         e.preventDefault();
-        if(!userUpdate.fullName)
-            navigation.replace("MainTabs")
-        else update(userUpdate)
+        updateUser(userUpdate);
     }
 
-  
+    const handleProfile = async (e) => {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) return;
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.7,
+        });
+
+        if (!result.canceled) {
+            const selectedImg = result.assets[0];
+            await upload(selectedImg)
+            navigation.replace("MainTabs")
+        }
+    }
+    const BASE_URL = "http://192.168.1.10:5000";
     return (
         <View className="flex-1 bg-zinc-900" style={{ paddingTop: top }}>
         <ScrollView
@@ -57,10 +99,13 @@ export default function UpdateProfile({navigation}) {
             <Text className="text-white text-lg font-semibold"></Text>
 
             <View className="flex-row gap-3">
-            <TouchableOpacity className="w-9 h-9 rounded-full bg-zinc-800 items-center justify-center">
-                <Ionicons name="save" size={20} color="white" onPress={handleSave} />
+            <TouchableOpacity className="w-9 h-9 rounded-full bg-zinc-800 items-center justify-center" disabled={!enable} onPress={handleSave}>
+                <Ionicons
+                    name={enable ? "save" : "save"}
+                    size={20}
+                    color={enable ? "white" : "#71717a"}
+                />
             </TouchableOpacity>
-
             </View>
         </View>
 
@@ -68,11 +113,15 @@ export default function UpdateProfile({navigation}) {
         <View className="flex-row items-center px-4 mt-6">
             
             {/* Avatar */}
-            <TouchableOpacity className="w-[80px] h-[80px] rounded-full bg-zinc-700 items-center justify-center">
+            <TouchableOpacity className="w-[80px] h-[80px] rounded-full bg-zinc-700 items-center justify-center" onPress={handleProfile}>
+                { userSQL?.avatar ? (
+                <Image source={{uri: `${BASE_URL}${userSQL?.avatar}`}} style={{width:75, height:75, borderRadius:50}} />
+                ) : (
                 <Ionicons name="person" size={50} color="#d4d4d8" />
+                )}
             </TouchableOpacity>
 
-            {/* Name + Edit */}
+            {/* Status Edit */}
             <View className="flex-1 ml-4 pt-4">
             <TouchableOpacity className="mt-2 w-1/2 h-[40px] rounded-full bg-zinc-800 
                 flex-row items-center justify-start pl-3 gap-2">
@@ -82,7 +131,7 @@ export default function UpdateProfile({navigation}) {
             </View>
         </View>
 
-        {/* ---------- ACCOUNT INFO ---------- */}
+        {/* ---------- ACCOUNT Edit ---------- */}
         <View className="flex-col">
             <Text className="text-white pl-5 pt-3 text-[25px]" >{userSQL?.fullName}</Text>
         </View>
@@ -94,6 +143,7 @@ export default function UpdateProfile({navigation}) {
                     onChangeText={(text) => setUserUpdate({...userUpdate, fullName: text})}
                     placeholder={userSQL?.fullName}
                     placeholderTextColor="#71717a"
+                    value={userUpdate.fullName}
                     className="h-[44px] rounded-xl bg-zinc-900 px-4 text-white"
                     />
                 </View>
@@ -102,8 +152,8 @@ export default function UpdateProfile({navigation}) {
                 <View className="mb-4">
                     <Text className="text-zinc-400 text-sm mb-1">Email</Text>
                     <TextInput
-                    value={email}
-                    onChangeText={setEmail}
+                    value={userUpdate.email}
+                    onChangeText={(text) => setUserUpdate({...userUpdate, email: text})}
                     placeholder={userSQL?.email}
                     placeholderTextColor="#71717a"
                     keyboardType="email-address"
@@ -116,8 +166,8 @@ export default function UpdateProfile({navigation}) {
                 <View className="mb-4">
                     <Text className="text-zinc-400 text-sm mb-1">More about me</Text>
                     <TextInput
-                    value={about}
-                    onChangeText={setAbout}
+                    value={userUpdate.bio}
+                    onChangeText={(text) => setUserUpdate({...userUpdate, bio: text})}
                     placeholder="More about yourself..."
                     placeholderTextColor="#71717a"
                     multiline

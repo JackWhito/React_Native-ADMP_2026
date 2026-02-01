@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { axiosInstance } from "../lib/axios";
+import Toast from "react-native-toast-message";
 import {
   initAuthDB,
   saveAuthUser,
@@ -12,7 +13,6 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [authUser, setAuthUser] = useState(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [userSQL, setUserSQL] = useState(null);
 
   const checkAuth = async () => {
     try{
@@ -29,7 +29,6 @@ export const AuthProvider = ({ children }) => {
       const res = await axiosInstance.get("/auth/check");
       await setAuthUser(res.data);
       await saveAuthUser(res.data);
-      await setUserSQL(res.data);
     } catch (error) {
       console.log("Error in checkAuth:", error.response.data.message);
       setAuthUser(null);
@@ -39,12 +38,41 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const upload = async (selectedImg) => {
+      if(!selectedImg)
+      {
+          console.log("canceled");
+          return
+      }
+      const formData = new FormData();
+      formData.append("avatar", {
+          uri: selectedImg.uri,
+          name: selectedImg.fileName || "avatar.jpg",
+          type: selectedImg.mimeType || "image/jpeg",
+      });
+      try{
+          const res = await axiosInstance.put(
+          "/auth/profile",
+          formData,
+          {
+              headers: {
+              "Content-Type": "multipart/form-data",
+              },
+          }
+          );
+          setAuthUser(res.data);
+          saveAuthUser(res.data);
+          Toast.show({
+              type:"success",
+              text1:"Image Updated"
+          })
+      } catch (error) {
+          console.log(error)
+      }
+  } 
+
   useEffect(() => {
     checkAuth();
-    (async () => {
-      const user = await getAuthUser();
-      setUserSQL(user);
-    })();
   }, []);
 
   return (
@@ -55,8 +83,7 @@ export const AuthProvider = ({ children }) => {
         checkAuth,
         setAuthUser,
         setIsCheckingAuth,
-        userSQL,
-        setUserSQL
+        upload
       }}
     >
       {children}

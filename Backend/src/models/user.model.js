@@ -16,6 +16,12 @@ const userSchema = new mongoose.Schema(
             required: true,
             minlength: 6,
         },
+        bio:{
+            type: String,
+        },
+        avatar:{
+            type: String,
+        },
 
         isVerified:{
             type: Boolean,

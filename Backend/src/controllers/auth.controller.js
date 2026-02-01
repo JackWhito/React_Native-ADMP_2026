@@ -135,6 +135,7 @@ export const loginJWT = async (req, res) => {
             fullName: user.fullName,
             email: user.email,
             role: user.role,
+            avatar: user.avatar,
             token
         })
     } catch (error) {
@@ -176,18 +177,25 @@ export const verifyOTP = async (req, res) => {
         if(user.otp !== otp || user.otpExpiry < Date.now()){
             return res.status(400).json({message:"Invalid or expired OTP"});
         }
+        
+        const updateUser = await User.findByIdAndUpdate(
+            user._id,
+            {
+                $set: {
+                    isVerified:true,
+                    otp: undefined,
+                    otpExpiry: undefined
+                }
+            },
+            {new: true}
+        );
 
-        user.isVerified = true;
-        user.otp = undefined;
-        user.otpExpiry = undefined;
-        await user.save();
-
-        genToken(user._id,"user", res);
+        genToken(updateUser._id,"user", res);
 
         res.status(200).json({
-            _id:user._id,
-            fullName: user.fullName,
-            email: user.email
+            _id:updateUser._id,
+            fullName: updateUser.fullName,
+            email: updateUser.email
         })
     } catch(error){
         console.log("Error in verifyOTP controller", error.message);
@@ -262,14 +270,19 @@ export const resetPassword = async (req, res) => {
 };
 
 export const updateUser = async (req, res) => {
-    const {userId, fullName } = req.body
+    const {userId, fullName, bio } = req.body
     try {
-        const user = await User.findById(userId);
-        if(!user){
-            return res.status(400).json({message:"Invalid user"});
+        const updateData={}
+        if(fullName !== undefined)
+            updateData.fullName = fullName
+        if(bio !== undefined && bio.trim() !== ""){
+            updateData.bio = bio;
         }
-        user.fullName = fullName
-        await user.save();
+        const user = await User.findByIdAndUpdate(
+            userId,
+            {$set: updateData},
+            {new: true}
+        );
         const token = genToken(user._id, user.role)
         res.status(200).json({
             _id:user._id,
@@ -280,6 +293,64 @@ export const updateUser = async (req, res) => {
         })
     } catch (error) {       
         console.log("Error in updateUser controller", error.message);
-        res.status(500).json({message:"Internal Server Error"});    
+        res.status(500).json({message: error.message});    
     }
 };
+
+export const updateEmail = async (req, res) => {
+    const {userId, email} = req.body;
+    try {
+        const user = await User.findById(userId);
+        if(!user){
+            return res.status(400).json({message:"User Invalid."})
+        }
+        const emailExists = await User.findOne({email, _id:{$ne: userId}});
+        if(emailExists) return res.status(409).json({message:"Email already in use."});
+
+        const otp = generateOTP();
+
+        const updateUser = await User.findByIdAndUpdate(
+            userId,
+            {
+                $set: {
+                    isVerified:false,
+                    email: email,
+                    otp: otp,
+                    otpExpiry: Date.now() + 5 * 60 * 1000
+                }
+            },
+            {new: true}
+        );
+        await sendOTPEmail(email, otp);
+        res.status(200).json({message:"OTP sent to email"});
+    } catch(error){
+        console.log("Error in updateEmail controller", error.message);
+        res.status(500).json({message: error.message});
+    }
+};
+
+export const updateProfile = async (req, res) => {
+    try {
+        if(!req.user)
+            return res.status(401).json({message:"Unauthorized"});
+        if(!req.file)
+            return res.status(400).json({message:"Profile pic is required"});
+        const profilePicPath = `/uploads/profiles/${req.file.filename}`;
+
+        const updatedUser = await User.findByIdAndUpdate(
+            req.user._id,
+            {avatar: profilePicPath},
+            {new: true, select: "-password"}
+        )
+        res.status(200).json({
+            _id: updatedUser._id,
+            fullName: updatedUser.fullName,
+            email: updatedUser.email,
+            role: updatedUser.role,
+            avatar: updatedUser.avatar,
+        })
+    } catch (error) {
+        console.error("Error in updateProfile controller", error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+}

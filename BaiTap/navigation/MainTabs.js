@@ -21,7 +21,7 @@ export default function MainTabs({navigation}) {
       });
       navigation.replace("Login");
     }
-  }, [checkAuth]);
+  }, []);
   return (
       <Tab.Navigator
         screenOptions={({ route }) => ({

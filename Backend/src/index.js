@@ -18,7 +18,7 @@ app.use(cors(
         credentials: true
     }
 ))
-
+app.use("/uploads", express.static("uploads"));
 app.use("/api/auth", authRoutes);
 
 app.get('/', (req, res) => {

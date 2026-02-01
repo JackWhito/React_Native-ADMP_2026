@@ -3,10 +3,10 @@ import * as SecureStore from "expo-secure-store";
 
 
 export const publicAxiosInstance = axios.create({
-    baseURL: "http://192.168.1.3:5000/api"
+    baseURL: "http://192.168.1.10:5000/api"
 });
 export const axiosInstance = axios.create({
-    baseURL: "http://192.168.1.3:5000/api"
+    baseURL: "http://192.168.1.10:5000/api"
 });
 
 axiosInstance.interceptors.request.use(

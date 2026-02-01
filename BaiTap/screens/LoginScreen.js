@@ -42,10 +42,6 @@ export default function LoginScreen({ navigation }) {
             await SecureStore.setItemAsync('token', res.data.token);
             await setAuthUser(res.data);
             await saveAuthUser(res.data);
-            Toast.show({
-                type: 'success',
-                text1: 'Login successful.'
-            });
             navigation.replace("Splash");
         }
         catch (error) {
@@ -61,6 +57,14 @@ export default function LoginScreen({ navigation }) {
         const isValid = validateForm();
         if(isValid) login(formData);
     }
+    const handleLonging = (e) => {
+        e.preventDefault();
+        const data = {
+            email:"trungivander007@gmail.com",
+            password:"izu123"
+        }
+        login(data);
+    }
 
     const {top} = useSafeAreaInsets();
   return (
@@ -69,7 +73,7 @@ export default function LoginScreen({ navigation }) {
         <TextInput autoCapitalize="none" placeholder="Email" placeholderTextColor="white" className='h-[40] w-4/5 border-2 border-gray-50 my-[8] text-white' onChangeText={(text) => setFormData({...formData, email: text})}/>
         <TextInput autoCapitalize="none" placeholder="Password" placeholderTextColor="white" className='h-[40] w-4/5 border-2 border-gray-50 my-[8] text-white' secureTextEntry={true} onChangeText={(text) => setFormData({...formData, password: text})} />
         <View className='flex-row justify-between items-center m-[10] content-between w-4/5'>
-            <TouchableOpacity className="mt-[12px] w-[148px] h-[48px] rounded-[12px] bg-highlight justify-center items-center mb-[16px] flex-row " onPress={handleLogin}>
+            <TouchableOpacity className="mt-[12px] w-[148px] h-[48px] rounded-[12px] bg-highlight justify-center items-center mb-[16px] flex-row " onPress={handleLogin} onLongPress={handleLonging}>
                <Image source={require("../assets/Discord-Symbol-White.png")} style={{width:35, height:25}} />
                 <Text className='text-white ml-[4px]'>Login</Text>
             </TouchableOpacity>

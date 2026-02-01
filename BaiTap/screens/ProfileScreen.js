@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity } from "react-native";
+import { View, Text, Image, TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/authContext";
@@ -7,18 +7,22 @@ import * as SecureStore from "expo-secure-store";
 import {publicAxiosInstance} from "../lib/axios.js"
 import Toast from "react-native-toast-message";
 
-import { clearAuthUser } from "../db/authDB.js";
+import { clearAuthUser, getAuthUser } from "../db/authDB.js";
 
 export default function ProfileScreen({navigation}) {
+  const [userSQL, setUserSQL] = useState(null);
   const {top} = useSafeAreaInsets();
-  const { checkAuth, setAuthUser, setIsCheckingAuth, userSQL, setUserSQL, authUser } = useAuth();
+  const { checkAuth, setAuthUser, setIsCheckingAuth, authUser } = useAuth();
   useEffect(() => {
     checkAuth();
     if (!authUser) {
       navigation.replace("Login");
     }
+    (async () => {
+      const user = await getAuthUser();
+      setUserSQL(user);
+    })();
   }, []);
-  
 
   const logout = async () => {
     try{
@@ -27,10 +31,6 @@ export default function ProfileScreen({navigation}) {
       await clearAuthUser();
       await setUserSQL(null);
       setAuthUser(null);
-      Toast.show({
-        type: "success",
-        text1: "Logged out successfully.",
-      });
       setIsCheckingAuth(false);
       navigation.replace("Login");
     } catch (error) {
@@ -50,6 +50,7 @@ export default function ProfileScreen({navigation}) {
     e.preventDefault();
     navigation.navigate("Update");
   }
+  const BASE_URL = "http://192.168.1.10:5000";
   return (
     <View className="flex-1 bg-zinc-900" style={{ paddingTop: top }}>
       
@@ -73,7 +74,11 @@ export default function ProfileScreen({navigation}) {
         
         {/* Avatar */}
         <TouchableOpacity className="w-[80px] h-[80px] rounded-full bg-zinc-700 items-center justify-center">
-            <Ionicons name="person" size={50} color="#d4d4d8" />
+            { userSQL?.avatar ? (
+              <Image source={{uri: `${BASE_URL}${userSQL?.avatar}`}} style={{width:75, height:75, borderRadius:50}} />
+            ) : (
+              <Ionicons name="person" size={50} color="#d4d4d8" />
+            )}
         </TouchableOpacity>
 
         {/* Name + Edit */}

@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, Button, TextInput } from "react-native";
-import { axiosInstance } from "../lib/axios";
+import { publicAxiosInstance } from "../lib/axios";
 import { useState } from "react";
 import { useAuth } from "../context/authContext.js";
 import Toast from "react-native-toast-message";
@@ -9,7 +9,7 @@ export default function Verify({ navigation, route }) {
     const {setAuthUser} = useAuth();
     const handleVerify = async() => {
         try {
-            const res = await axiosInstance.post("/auth/verify-otp", {
+            const res = await publicAxiosInstance.post("/auth/verify-otp", {
                 email: route.params.email,
                 otp
             });
@@ -30,7 +30,7 @@ export default function Verify({ navigation, route }) {
 
     const handleResend = async () => {
       try {
-        const res = await axiosInstance.post("/auth/resend-otp", {
+        const res = await publicAxiosInstance.post("/auth/resend-otp", {
           email: route.params.email
         });
         Toast.show({

@@ -23,7 +23,7 @@ export default function AdminCheckScreen({ navigation }) {
       <Text className="text-[24px] font-semibold text-white">Welcome, Endministrator {authUser?.fullName}!</Text>
       <Text className="text-[24px] font-semibold text-white">You have {authUser?.role} access.</Text>
       <View className="m-[12px] content-between flex-row justify-between w-2/3">
-        <Button title="Go to Home" onPress={() => navigation.navigate("MainTabs")} />
+        <Button title="Go to Home" onPress={() => navigation.replace("MainTabs")} />
       </View>
     </View>
   );
