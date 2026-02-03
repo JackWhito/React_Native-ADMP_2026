@@ -14,6 +14,8 @@ export const ChatProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
+  const [isSending, setIsSending] = useState(false);
+
   const getChats = async () => {
     if (!authUser) return;
 
@@ -42,6 +44,46 @@ export const ChatProvider = ({ children }) => {
       setLoadingMessages(false);
     }
   };
+
+  const sendMessage = async ({chatId, text, image}) => {
+    try {
+      setIsSending(true);
+
+      const formData = new FormData();
+      formData.append("chatId", chatId);
+
+      if(text?.trim()){
+        formData.append("text", text.trim());
+      }
+      if(image) {
+        formData.append("image",{
+          uri: image.uri,
+          name: image.fileName || "message.jpg",
+          type: image.mimeType || "image/jpeg",
+        });
+      }
+      const res = await axiosInstance.post(
+        "/message/send",
+        formData,
+        {
+          headers:{
+            "Content-Type": "multipart/form-data",
+          }
+        }
+      );
+      setMessages((prev)=> [...prev, res.data]);
+      return res.data;
+    } catch (error) {
+      console.error(
+          "Send message failed:",
+          error.response?.data || error.message
+      );
+      throw error;
+    } finally {
+      setIsSending(false)
+    }
+  };
+
   // Fetch chats when user logs in
   useEffect(() => {
     if (authUser) {
@@ -59,6 +101,8 @@ export const ChatProvider = ({ children }) => {
         chatError,
         messages,
         loadingMessages,
+        isSending,
+        sendMessage,
         getChats,
         refreshChats: getChats,
         getMessages,

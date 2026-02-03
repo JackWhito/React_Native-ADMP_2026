@@ -34,3 +34,39 @@ export async function getMessages(req, res) {
         res.status(500).json({ message: "Internal Server Error" });
     }
 }
+
+export const sendMessage = async (req, res) => {
+  try {
+    const { text, chatId } = req.body;
+    const senderId = req.user._id;
+
+    if (!text && !req.file) {
+      return res
+        .status(400)
+        .json({ message: "Message text or image is required" });
+    }
+
+    let imagePath = null;
+
+    if (req.file) {
+      imagePath = `/uploads/messages/${req.file.filename}`;
+    }
+
+    const message = await Message.create({
+      chat: chatId,
+      sender: senderId,
+      text: text || "",
+      image: imagePath,
+    });
+
+    const populatedMessage = await message.populate(
+      "sender",
+      "username avatar"
+    );
+
+    res.status(201).json(populatedMessage);
+  } catch (error) {
+    console.error("Send message error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
