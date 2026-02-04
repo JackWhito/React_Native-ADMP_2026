@@ -22,6 +22,7 @@ import UpdateProfile from "./screens/UpdateProfileScreen.js";
 import ChatScreen from "./screens/ChatScreen.js";
 import HomeScreen from "./screens/HomeScreen.js";
 import { ChatProvider } from "./context/chatContext.js";
+import ChatDetailScreen from "./screens/ChatDetailScreen.js";
 
 const Stack = createNativeStackNavigator();
 
@@ -59,6 +60,7 @@ export default function App() {
         <Stack.Screen name="Update" component={UpdateProfile} options={{animation:"slide_from_right"}} />
         <Stack.Screen name="ChatContainer" component={ChatScreen} options={{animation:"slide_from_right"}} />
         <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
       </Stack.Navigator>
       </ChatProvider>
       </AuthProvider>

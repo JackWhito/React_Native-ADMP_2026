@@ -6,9 +6,6 @@ import { useChats } from "../context/chatContext";
 export default function HomeArea() {
   const {chats, isLoadingChats} = useChats();
   const navigation = useNavigation()
-  const handlePress = (chatId) => {
-    navigation.navigate("ChatContainer",{chatId})
-  }
   const BASE_URL = "http://192.168.1.10:5000";
   if(isLoadingChats) {
     return (
@@ -56,12 +53,15 @@ export default function HomeArea() {
           const avatarUri = user?.avatar
             ? `${BASE_URL}${user.avatar}`
             : null;
+          const chatId=chat._id;
+          const userAvatar = user.avatar;
+          const userFullname = user.fullName
 
           return (
             <TouchableOpacity
               key={chat._id}
               className="w-full p-3 flex-row items-start gap-3"
-              onPress={() => handlePress(chat._id)}
+              onPress={() => navigation.navigate("ChatContainer",{chatId, userAvatar, userFullname})}
             >
               {/* Avatar */}
               <View className="w-[40px] h-[40px] rounded-full bg-zinc-700 items-center justify-center overflow-hidden">

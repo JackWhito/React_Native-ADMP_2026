@@ -16,6 +16,13 @@ export const ChatProvider = ({ children }) => {
 
   const [isSending, setIsSending] = useState(false);
 
+  const [participants, setParticipants] = useState([]);
+  const [pCount, setPCount] = useState(0);
+
+  const [images, setImages] = useState([]);
+
+  const [links, setLink] = useState([]);
+
   const getChats = async () => {
     if (!authUser) return;
 
@@ -45,23 +52,10 @@ export const ChatProvider = ({ children }) => {
     }
   };
 
-  const sendMessage = async ({chatId, text, image}) => {
+  const sendMessage = async (formData) => {
     try {
       setIsSending(true);
 
-      const formData = new FormData();
-      formData.append("chatId", chatId);
-
-      if(text?.trim()){
-        formData.append("text", text.trim());
-      }
-      if(image) {
-        formData.append("image",{
-          uri: image.uri,
-          name: image.fileName || "message.jpg",
-          type: image.mimeType || "image/jpeg",
-        });
-      }
       const res = await axiosInstance.post(
         "/message/send",
         formData,
@@ -71,16 +65,40 @@ export const ChatProvider = ({ children }) => {
           }
         }
       );
-      setMessages((prev)=> [...prev, res.data]);
+
+      setMessages(prev => [...prev, res.data]);
       return res.data;
-    } catch (error) {
-      console.error(
-          "Send message failed:",
-          error.response?.data || error.message
-      );
-      throw error;
     } finally {
-      setIsSending(false)
+      setIsSending(false);
+    }
+  };
+
+
+  const getParticipants = async (chatId) => {
+    try {
+      const res = await axiosInstance.get(`/chat/participants/${chatId}`);
+      setParticipants(res.data.participants);
+      setPCount(res.data.participantsCount);
+    } catch (error) {
+      console.error("Get participants failed", error);
+    }
+  };
+
+  const getImages = async (chatId) => {
+    try {
+      const res = await axiosInstance.get(`/message/image/${chatId}`);
+      setImages(res.data);
+    } catch (error) {
+      console.error("Get images failed", error);
+    }
+  };
+
+  const getLinks = async (chatId) => {
+    try {
+      const res = await axiosInstance.get(`/message/links/${chatId}`);
+      setLink(res.data);
+    } catch (error) {
+      console.error("Get links failed", error);
     }
   };
 
@@ -102,10 +120,17 @@ export const ChatProvider = ({ children }) => {
         messages,
         loadingMessages,
         isSending,
+        participants,
+        pCount,
+        images,
+        links,
         sendMessage,
         getChats,
         refreshChats: getChats,
         getMessages,
+        getParticipants,
+        getImages,
+        getLinks
       }}
     >
       {children}

@@ -1,18 +1,16 @@
 import { View, Text, KeyboardAvoidingView, Platform, FlatList, Image } from "react-native";
 import ChatHeader from "../components/ChatHeader";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import MessageInput from "../components/MessageInput";
 import { useRoute } from "@react-navigation/native";
 import { useChats } from "../context/chatContext";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useAuth } from "../context/authContext";
 
 export default function ChatScreen() {
-    const {top, bottom} = useSafeAreaInsets();
-    const [ratio, setRatio] = useState(1);
     const route = useRoute();
     const {authUser} = useAuth();
-    const {chatId} = route.params;
+    const {chatId, userAvatar, userFullname} = route.params;
     const listRef = useRef(null);
 
     const { messages, getMessages, loadingMessages } = useChats();
@@ -24,7 +22,7 @@ export default function ChatScreen() {
 
     return (
         <SafeAreaView className="flex-1 bg-dark" edges={["top", "bottom"]}>
-        <ChatHeader />
+        <ChatHeader chatId={chatId} avatar={userAvatar} fullName={userFullname} />
         <KeyboardAvoidingView
             style={{flex:1}}
             behavior= {Platform.OS === "ios" ? "padding" : "height"}
@@ -48,17 +46,22 @@ export default function ChatScreen() {
                             : "bg-gray-700 rounded-tl-sm"
                         }`}
                         >
-                        {!!msg.image && (
-                            <Image source={{uri: `${BASE_URL}${msg.image}`}} style={{width:200, height:200 / ratio, borderRadius:12}} resizeMethod="cover"
-                              onLoad={(e) => {
-                                const { width, height } = e.nativeEvent.source;
-                                setRatio(width/height);
-                            }} />
-                        )}
                         {!!msg.text && (
                             <Text className="text-white text-base">
                             {msg.text}
                             </Text>
+                        )}
+                        {!!msg.image && (
+                        <Image
+                            source={{ uri: `${BASE_URL}${msg.image}` }}
+                            style={{
+                            width: 200,
+                            aspectRatio: 1,
+                            borderRadius: 12,
+                            marginTop:3
+                            }}
+                            resizeMode="cover"
+                        />
                         )}
                         </View>
                     </View>
