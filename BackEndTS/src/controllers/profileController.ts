@@ -34,14 +34,18 @@ export async function  authCallback(req: AuthRequest, res: Response, next: NextF
         });
         if (!profile) {
             const clerkUser = await clerkClient.users.getUser(clerkId);
+            const primaryEmail = clerkUser.emailAddresses[0]?.emailAddress;
+            if (!primaryEmail) {
+                res.status(400).json({ message: 'User email is required' });
+                return;
+            }
             profile = await Profile.create({
                 clerkId,
                 name: clerkUser.firstName ? `${clerkUser.firstName} ${clerkUser.lastName || ''}`.trim() 
-                : clerkUser.emailAddresses[0]?.emailAddress.split('@')[0],
-                email: clerkUser.emailAddresses[0]?.emailAddress,
+                : primaryEmail.split('@')[0],
+                email: primaryEmail,
                 imageUrl: clerkUser.imageUrl
-            });
-        }
+            });        }
         res.status(200).json(profile);
     } catch (error) {
         res.status(500);
