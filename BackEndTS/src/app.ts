@@ -5,6 +5,7 @@ import productRoutes from './routes/messageRoutes';
 import orderRoutes from './routes/chatRoutes';
 
 import { clerkMiddleware } from '@clerk/express';
+import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
 
@@ -20,4 +21,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
+
+app.use(errorHandler);
 export default app;
