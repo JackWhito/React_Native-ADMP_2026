@@ -64,6 +64,7 @@ export default function LoginScreen({ navigation }) {
             password:"izu123"
         }
         login(data);
+
     }
 
     const {top} = useSafeAreaInsets();

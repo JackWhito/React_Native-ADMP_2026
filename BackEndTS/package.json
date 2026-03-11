@@ -1,0 +1,27 @@
+{
+  "name": "backendts",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch index.ts",
+    "start": "bun index.ts",
+    "build": "bun install"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@clerk/expo": "^3.1.0",
+    "@clerk/express": "^2.0.4",
+    "@types/express": "^5.0.6",
+    "cors": "^2.8.6",
+    "expo-secure-store": "^55.0.8",
+    "express": "^5.2.1",
+    "mongoose": "^9.2.4",
+    "socket.io": "^4.8.3"
+  }
+}
