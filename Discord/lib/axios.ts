@@ -1,34 +1,56 @@
 import axios from "axios";
-import { useAuth } from "@clerk/expo"
-import { useEffect } from "react";
+import { useAuth } from "@clerk/expo";
+import { useCallback } from "react";
 
 const API_URL = "http://192.168.1.3:5000/api";
 
 const api = axios.create({
-    baseURL: API_URL,
-    headers: {
-        "Content-Type": "application/json",
-    },
+  baseURL: API_URL,
+  headers: { "Content-Type": "application/json" },
 });
 
-export const useApi = () => {
-    const {getToken} = useAuth()
-
-    useEffect(() => {
-        const requestInterceptor = api.interceptors.request.use(async (config) => {
-            try {
-                const token = await getToken();
-                if (token) {
-                    config.headers.Authorization = `Bearer ${token}`;
-                }
-            } catch (error) {
-                console.error("Failed to get auth token:", error);
-            }
-            return config;
-        });
-        return () => {
-            api.interceptors.request.eject(requestInterceptor);
+// Response interceptor (registered once)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      console.error(
+        `API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`,
+        {
+          status: error.response.status,
+          data: error.response.data,
         }
-    },[getToken])
-    return api;
-}
+      );
+    } else if (error.request) {
+      console.warn("API request sent but no response received", {
+        endpoint: error.config?.url,
+        method: error.config?.method,
+      });
+    } else {
+      console.error("API request setup error:", error.message);
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export const useApi = () => {
+  const { getToken } = useAuth();
+
+  const apiWithAuth = useCallback(
+    async <T = any>(config: Parameters<typeof api.request>[0]) => {
+      const token = await getToken();
+
+      return api.request<T>({
+        ...config,
+        headers: {
+          ...config.headers,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+    },
+    [getToken]
+  );
+
+  return { api, apiWithAuth };
+};
