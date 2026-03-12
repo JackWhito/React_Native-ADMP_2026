@@ -3,6 +3,7 @@ import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
 import productRoutes from './routes/messageRoutes';
 import orderRoutes from './routes/chatRoutes';
+import serverRoutes from './routes/serverRoutes';
 
 import { clerkMiddleware } from '@clerk/express';
 import { errorHandler } from './middleware/errorHandler';
@@ -21,6 +22,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/servers", serverRoutes)
 
 app.use(errorHandler);
 export default app;

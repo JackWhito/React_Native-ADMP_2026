@@ -1,12 +1,20 @@
-import { View, Text, ScrollView } from 'react-native'
+import { View, Text, FlatList } from 'react-native'
 import React from 'react'
 import NavigationSideBar from '../navigation/NavigationSideBar'
 
 const ChatTab = () => {
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic">
-      <Text>ChatTab</Text>
-    </ScrollView>
+  <View className="flex-1 flex-row">
+
+    <View className="w-[72px]">
+      <NavigationSideBar />
+    </View>
+
+    <View className="flex-1">
+      <Text className="text-lg font-semibold p-4">Chat</Text>
+    </View>
+
+  </View>
   )
 }
 
