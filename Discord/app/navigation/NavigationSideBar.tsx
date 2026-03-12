@@ -11,7 +11,7 @@ export default function NavigationSideBar() {
     const {data:servers, isLoading, error} = useServers()
     if(isLoading) return (
         <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size={"large"} color={"f4A261"} />
+            <ActivityIndicator size="large" color="#F4A261" />        
         </View>
     )
     if(error){
@@ -33,7 +33,7 @@ export default function NavigationSideBar() {
         })
     };
     return (
-        <View className="flex-1 dark:bg-[#1E1F22] space-y-4 flex-col items-center text-primary py-3 w-full">
+        <View className="flex-1 dark:bg-[#1E1F22] space-y-4 flex-col items-center py-3 w-full">           
             <NavigationAction />
             <FlatList
                 data = {servers}
