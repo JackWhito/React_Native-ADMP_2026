@@ -1,6 +1,8 @@
 import { useSSO } from "@clerk/expo";
+import { router } from "expo-router";
 import {useState} from "react";
 import { Alert } from "react-native";
+import * as AuthSession from "expo-auth-session";
 
 function useAuthSocial() {
     const [loadingStrategy, setLoadingStrategy] = useState<string | null>(null);
@@ -10,7 +12,8 @@ function useAuthSocial() {
         setLoadingStrategy(strategy);
 
         try {
-            const { createdSessionId, setActive } = await startSSOFlow({strategy});
+            const redirectUrl = AuthSession.makeRedirectUri();
+            const { createdSessionId, setActive } = await startSSOFlow({strategy, redirectUrl});
             if(createdSessionId && setActive) {
                 await setActive({ session: createdSessionId });
             } else if (!createdSessionId) {

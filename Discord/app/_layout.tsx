@@ -22,9 +22,9 @@ export default function RootLayout() {
             {/* Main */}
             <AuthSync />
             <View className="flex-1">
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(auth)" />
-                <Stack.Screen name="(tabs)" />
+              <Stack screenOptions={{ headerShown: false, contentStyle: {backgroundColor:"#0D0D0F"} }}>
+                <Stack.Screen name="(auth)" options={{animation:"fade"}} />
+                <Stack.Screen name="(tabs)" options={{animation:"fade"}} />
               </Stack>
             </View>
           </View>
