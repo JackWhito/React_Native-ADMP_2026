@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { protectRoute } from "../middleware/auth";
-import { authCallback, getMe } from "../controllers/profileController";
+import { authCallback, getMe } from "../controllers/authController";
 
 const router = Router();    
 
