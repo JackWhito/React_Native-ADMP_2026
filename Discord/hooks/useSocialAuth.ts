@@ -13,7 +13,8 @@ function useAuthSocial() {
             const { createdSessionId, setActive } = await startSSOFlow({strategy});
             if(createdSessionId && setActive) {
                 await setActive({ session: createdSessionId });
-            }
+            } else if (!createdSessionId) {
+            }        
         } catch (error) {
             console.error("Social auth error:", error);
             const provider = strategy === "oauth_google" ? "Google" : "Unknown";

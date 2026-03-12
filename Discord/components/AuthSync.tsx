@@ -13,10 +13,10 @@ const AuthSync = () => {
             hasSynced.current = true;
             syncUser(undefined, {
                 onSuccess: (data) => {
-                    console.log("User synced successfully", data.name);
+                    console.log("User synced successfully");
                 },
-                onError: (data) => {
-                    console.error("Failed to sync user", data.name);
+                onError: (error) => {
+                    console.error("Failed to sync user", error.message);
                 }
             })
         }
@@ -24,5 +24,6 @@ const AuthSync = () => {
             hasSynced.current = false;
         }
     },[isSignedIn, user, syncUser])
+    return null;
 }
 export default AuthSync;
