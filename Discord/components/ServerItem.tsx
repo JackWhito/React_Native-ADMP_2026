@@ -11,8 +11,9 @@ const ServerItem = ({server, onPress}: {server: Server, onPress: () => void}) =>
       onPress={() => console.log("press")}>
       <Image
         source={{uri: server.imageUrl}}
-      />
-    </Pressable>
+        style={{ width: 48, height: 48 }}
+      />    
+      </Pressable>
   )
 }
 
