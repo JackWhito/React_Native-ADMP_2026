@@ -1,35 +1,51 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+import { View, Text } from 'react-native'
+import React from 'react'
+import { Redirect, Tabs } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/expo';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
+const TabsLayout = () => {
+  const { isSignedIn, isLoaded} = useAuth()
+  if(!isLoaded) return null;
+  if(!isSignedIn) return <Redirect href={"/(auth)"} />
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
-        }}
-      />
+    <View style={{ marginTop: 40, flex: 1, flexDirection: 'row' }}>
+    <Tabs screenOptions={{
+      headerShown: false,
+      tabBarStyle: {
+        height: 100,
+        borderTopColor: '#ccc',
+        backgroundColor: '#202020',
+      },
+      tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+    }}>
+        <Tabs.Screen 
+          name='index'
+          options={{
+            title:"Chats",
+            tabBarIcon: ({color, focused, size}) => (
+            <Ionicons name={focused ? "chatbubble" : "chatbubble-outline"} size={size} color={color} />
+          ),
+        }} />
+        <Tabs.Screen 
+          name="profile"
+          options={{
+            title:"Profile",
+            tabBarIcon: ({color, focused, size}) => (
+              <Ionicons name={focused ? "person" : "person-outline"} size={size} color={color} />
+            ),
+          }} />
+        <Tabs.Screen 
+          name="settings"
+          options={{
+            title:"Settings",
+            tabBarIcon: ({color, focused, size}) => (
+              <Ionicons name={focused ? "settings" : "settings-outline"} size={size} color={color} />
+            ),
+          }} />
     </Tabs>
-  );
+    </View>
+  )
 }
+
+export default TabsLayout
