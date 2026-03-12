@@ -35,6 +35,24 @@ export async function getOrCreateConversation(req: AuthRequest, res: Response, n
 
     res.status(200).json(conversation);
   } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+export async function getConversations(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  try{
+    const conversations = await Conversation.find({
+      $or: [
+        {memberOne: userId},
+        {memberTwo: userId}
+      ]
+    })
+    res.status(200).json(conversations)
+  } catch (error)
+  {
+    res.status(500);
     next(error);
   }
 }
