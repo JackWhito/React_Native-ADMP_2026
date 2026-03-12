@@ -25,9 +25,6 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-    "expo":{
-      "plugins": ["@clerk/expo"]
-    },
     "plugins": [
       "expo-router",
       [
@@ -43,7 +40,8 @@
         }
       ],
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      "@clerk/expo"
     ],
     "experiments": {
       "typedRoutes": true,

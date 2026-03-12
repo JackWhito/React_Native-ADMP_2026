@@ -20,10 +20,10 @@ const ChatTab = () => {
       )
   }
 
-  const handleChatPress = (item) => {
-
-  }
-  return (
+  const handleChatPress = (item: ChatItem) => {
+    // TODO: Navigate to chat detail screen
+    // router.push(`/chat/${item._id}`);
+  };  return (
   <View className="flex-1 flex-row bg-zinc-900">
 
     <View className="w-[72px]">
@@ -42,11 +42,10 @@ const ChatTab = () => {
       <View className="h-[48px] px-[16px] flex-row items-center border-zinc-800">
         <TouchableOpacity
             activeOpacity={0.7}
-            className="w-[38] h-[38] rounded-[24px] bg-sidebar justify-center items-center"
+            className="w-[38px] h-[38px] rounded-[24px] bg-sidebar justify-center items-center"
         >
             <Ionicons name="search" size={18} color="white"/>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </TouchableOpacity>        <TouchableOpacity
             activeOpacity={0.7}
             className="ml-[8px] flex-row items-center justify-center bg-sidebar rounded-[24px] w-[240px] h-[38px]"
         >
