@@ -8,7 +8,7 @@ const TabsLayout = () => {
   const { isSignedIn, isLoaded} = useAuth();
 
   useEffect(() => {
-    if(!isSignedIn) router.replace("/(auth)")
+    if(!isSignedIn) router.replace("/(auth)/signin")
   },[isSignedIn]);
 
   if(!isLoaded) return null;

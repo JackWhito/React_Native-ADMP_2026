@@ -4,6 +4,7 @@ import userRoutes from './routes/userRoutes';
 import productRoutes from './routes/messageRoutes';
 import orderRoutes from './routes/chatRoutes';
 import serverRoutes from './routes/serverRoutes';
+import conversationRoutes from './routes/conversationRoutes';
 
 import { clerkMiddleware } from '@clerk/express';
 import { errorHandler } from './middleware/errorHandler';
@@ -23,5 +24,8 @@ app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/servers", serverRoutes);
+app.use("/api/conversations", conversationRoutes);
+
+
 app.use(errorHandler);
 export default app;

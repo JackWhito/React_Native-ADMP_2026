@@ -2,7 +2,7 @@ import axios from "axios";
 import { useAuth } from "@clerk/expo";
 import { useCallback } from "react";
 
-const API_URL = "http://192.168.1.3:5000/api";
+const API_URL = "http://10.46.162.78:5000/api";
 
 const api = axios.create({
   baseURL: API_URL,

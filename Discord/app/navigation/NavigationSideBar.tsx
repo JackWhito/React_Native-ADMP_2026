@@ -1,10 +1,8 @@
 import { View, Text, Pressable, ActivityIndicator, FlatList } from "react-native";
 import { router } from "expo-router";
 import { useServers } from "@/hooks/useServer";
-import { Ionicons } from "@expo/vector-icons";
 import ServerItem from "@/components/ServerItem";
 import NavigationAction from "@/components/NavigationAction";
-import { Separator } from "@/components/ui/separator";
 import { Server } from "@/types";
 
 export default function NavigationSideBar() {
