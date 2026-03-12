@@ -1,13 +1,18 @@
 import { View, Text } from 'react-native'
-import React from 'react'
-import { Redirect, Tabs } from 'expo-router'
+import React, { useEffect } from 'react'
+import { Redirect, router, Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/expo';
 
 const TabsLayout = () => {
-  const { isSignedIn, isLoaded} = useAuth()
+  const { isSignedIn, isLoaded} = useAuth();
+
+  useEffect(() => {
+    if(!isSignedIn) router.replace("/(auth)")
+  },[isSignedIn]);
+
   if(!isLoaded) return null;
-  if(!isSignedIn) return <Redirect href={"/(auth)"} />
+
   return (
     <View style={{ marginTop: 40, flex: 1, flexDirection: 'row' }}>
     <Tabs screenOptions={{
