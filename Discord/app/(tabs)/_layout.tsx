@@ -14,7 +14,7 @@ const TabsLayout = () => {
   if(!isLoaded) return null;
 
   return (
-    <View style={{ marginTop: 40, flex: 1, flexDirection: 'row' }}>
+    <View style={{ marginTop: 40, flex: 1, flexDirection: 'row' }} >
     <Tabs screenOptions={{
       headerShown: false,
       tabBarStyle: {

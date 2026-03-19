@@ -13,6 +13,10 @@ module.exports = {
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
+        // Discord-like layout tokens
+        sidebar: 'hsl(var(--sidebar))',
+        surface: 'hsl(var(--surface))',
+        'subtle-foreground': 'hsl(var(--subtle-foreground))',
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',
