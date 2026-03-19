@@ -6,7 +6,7 @@ import mongoose from "mongoose";
 export async function getOrCreateConversation(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userOne = req.profileId;
-    const { userTwo } = req.params;
+    const userTwo = (req.params as any)?.userTwo as string | undefined;
     if(!userTwo || !mongoose.Types.ObjectId.isValid(userTwo)) {
       return res.status(400).json({ error: "Invalid user ID" });
     }
@@ -48,8 +48,26 @@ export async function getConversations(req: AuthRequest, res: Response, next: Ne
         {memberOne: userId},
         {memberTwo: userId}
       ]
+    }).populate("memberOne", "name email imageUrl")
+    .populate("memberTwo", "name email imageUrl")
+    .populate("lastMessage", "text sender createdAt")
+    .sort({lastMessageAt:-1});
+
+    const formatted = conversations.map(conversation => {
+      const memberOneDoc: any = conversation.memberOne as any;
+      const memberOneId =
+        memberOneDoc?._id ? memberOneDoc._id.toString() : String(memberOneDoc);
+
+      const others = memberOneId === userId ? conversation.memberTwo : conversation.memberOne;
+      return {
+        _id: conversation._id,
+        member: others,
+        lastMessage: conversation.lastMessage,
+        lastMessageAt: conversation.lastMessageAt,
+        createdAt: conversation.createdAt,
+      }
     })
-    res.status(200).json(conversations)
+    res.status(200).json(formatted)
   } catch (error)
   {
     res.status(500);
