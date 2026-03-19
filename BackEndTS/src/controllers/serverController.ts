@@ -49,12 +49,17 @@ export async function createServer(req: AuthRequest, res: Response, next: NextFu
 
     // ensure inviteCode uniqueness with a few retries
     let inviteCode = generateInviteCode();
+    let unique = false;
     for (let i = 0; i < 5; i++) {
-      const exists = await Server.exists({ inviteCode });
-      if (!exists) break;
+      if (!(await Server.exists({ inviteCode }))) {
+        unique = true;
+        break;
+      }
       inviteCode = generateInviteCode();
     }
-
+    if (!unique) {
+      return res.status(500).json({ error: "Failed to generate unique invite code" });
+    }
     const server = await Server.create({
       name: name.trim(),
       imageUrl: typeof imageUrl === "string" ? imageUrl : "",

@@ -3,7 +3,7 @@ import mongoose, {Schema, type Document} from "mongoose";
 export interface IConversation extends Document {
     memberOne: mongoose.Types.ObjectId;
     memberTwo: mongoose.Types.ObjectId;
-    lastMessage: mongoose.Types.ObjectId;
+    lastMessage: mongoose.Types.ObjectId | null;    
     lastMessageAt: Date;
     createdAt: Date;
     updatedAt: Date;

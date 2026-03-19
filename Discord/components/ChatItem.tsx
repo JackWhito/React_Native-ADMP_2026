@@ -32,9 +32,8 @@ const ChatItem = ({chat, onPress}: {chat: Chat, onPress: () => void}) => {
           <Text
             className={`text-base font-medium ${hasUnread ? "text-primary" : "text-foreground"}`}
           >
-            {participant.name}
+            {participant?.name ?? "Unknown"} 
           </Text>
-
           <View className="flex-row items-center gap-2">
             {hasUnread && <View className="w-2.5 h-2.5 bg-primary rounded-full" />}
             <Text className="text-xs text-subtle-foreground">
