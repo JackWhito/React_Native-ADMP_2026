@@ -41,3 +41,16 @@ export interface Server{
     name: string;
     imageUrl: string;
 }
+
+export type ServerChannelType = "text" | "audio" | "video";
+
+export interface ServerChannel {
+  _id: string;
+  name: string;
+  type: ServerChannelType;
+  server: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ServerWithChannels = Server & { channels?: ServerChannel[] };

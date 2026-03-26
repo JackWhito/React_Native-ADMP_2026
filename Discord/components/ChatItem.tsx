@@ -1,6 +1,7 @@
 import { View, Text, Pressable, Image, ActivityIndicator } from 'react-native'
 import React from 'react'
 import { Chat } from '@/types'
+import { remoteImageSource } from '@/lib/utils'
 import { useRouter } from 'expo-router'
 import { useChat } from '@/hooks/useChat'
 import { formatDistanceToNow } from 'date-fns'
@@ -18,7 +19,7 @@ const ChatItem = ({chat, onPress}: {chat: Chat, onPress: () => void}) => {
       {/* avatar & online indicator */}
       <View className="relative">
         <Image
-          source={participant?.imageUrl ? { uri: participant.imageUrl } : undefined}
+          source={remoteImageSource(participant?.imageUrl)}
           style={{ width: 56, height: 56, borderRadius: 999, backgroundColor: "#27272a" }}
         />
         {isOnline && (
