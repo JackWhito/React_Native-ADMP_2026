@@ -28,8 +28,16 @@ export default function RootLayout() {
                   <Stack.Screen name="(auth)" options={{animation:"fade"}} />
                   <Stack.Screen name="(tabs)" options={{animation:"fade"}} />
                   <Stack.Screen
-                    name="server/create"
-                    options={{ presentation: "modal", animation: "slide_from_bottom" }}
+                    name="profile/edit"
+                    options={{ animation: "slide_from_right" }}
+                  />
+                  <Stack.Screen
+                    name="chat/[id]"
+                    options={{ animation: "slide_from_right" }}
+                  />
+                  <Stack.Screen
+                    name="server/[id]"
+                    options={{ animation: "slide_from_right" }}
                   />
                 </Stack>
                 <PortalHost />

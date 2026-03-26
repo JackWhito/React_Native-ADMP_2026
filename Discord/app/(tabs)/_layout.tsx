@@ -24,30 +24,45 @@ const TabsLayout = () => {
       },
       tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
     }}>
-        <Tabs.Screen 
-          name='index'
+        <Tabs.Screen
+          name="index"
           options={{
-            title:"Chats",
-            tabBarIcon: ({color, focused, size}) => (
-            <Ionicons name={focused ? "chatbubble" : "chatbubble-outline"} size={size} color={color} />
-          ),
-        }} />
-        <Tabs.Screen 
+            title: "Chats",
+            tabBarIcon: ({ color, focused, size }) => (
+              <Ionicons
+                name={focused ? "chatbubbles" : "chatbubbles-outline"}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="notifications"
+          options={{
+            title: "Notifications",
+            tabBarIcon: ({ color, focused, size }) => (
+              <Ionicons
+                name={focused ? "notifications" : "notifications-outline"}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="profile"
           options={{
-            title:"Profile",
-            tabBarIcon: ({color, focused, size}) => (
-              <Ionicons name={focused ? "person" : "person-outline"} size={size} color={color} />
+            title: "Profile",
+            tabBarIcon: ({ color, focused, size }) => (
+              <Ionicons
+                name={focused ? "person" : "person-outline"}
+                size={size}
+                color={color}
+              />
             ),
-          }} />
-        <Tabs.Screen 
-          name="settings"
-          options={{
-            title:"Settings",
-            tabBarIcon: ({color, focused, size}) => (
-              <Ionicons name={focused ? "settings" : "settings-outline"} size={size} color={color} />
-            ),
-          }} />
+          }}
+        />
     </Tabs>
     </View>
   )
