@@ -21,6 +21,7 @@
     "cors": "^2.8.6",
     "expo-secure-store": "^55.0.8",
     "express": "^5.2.1",
+    "jose": "^6.2.2",
     "mongoose": "^9.2.4",
     "socket.io": "^4.8.3"
   }

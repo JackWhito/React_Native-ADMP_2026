@@ -5,6 +5,7 @@ import productRoutes from './routes/messageRoutes';
 import orderRoutes from './routes/chatRoutes';
 import serverRoutes from './routes/serverRoutes';
 import conversationRoutes from './routes/conversationRoutes';
+import adminRoutes from './routes/adminRoutes';
 
 import { clerkMiddleware } from '@clerk/express';
 import { errorHandler } from './middleware/errorHandler';
@@ -20,6 +21,7 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);

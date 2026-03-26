@@ -11,7 +11,31 @@ interface SocketWithProfile extends Socket {
 export const onlineUsers: Map<string, string> = new Map();
 
 export const initializeSocket = (server: HttpServer) => {
-    const io = new SocketServer(server, {cors: {origin: "http://localhost:8081"}});
+    // Allow Flutter mobile (no CORS) and Flutter web / dev hosts (CORS).
+    // Configure via SOCKET_CORS_ORIGIN="http://localhost:8081,http://10.0.2.2:8081,https://your-web-domain"
+    const allowedOrigins = (process.env.SOCKET_CORS_ORIGIN ?? 'http://localhost:8081')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+    const io = new SocketServer(server, {
+        cors: {
+            origin: (origin, callback) => {
+                // Non-browser clients (Flutter mobile/desktop) typically send no Origin header.
+                if (!origin) return callback(null, true);
+
+                if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+                    return callback(null, true);
+                }
+
+                return callback(new Error(`Socket origin not allowed: ${origin}`));
+            },
+            credentials: true,
+            methods: ['GET', 'POST'],
+        },
+        transports: ['websocket', 'polling'],
+        allowEIO3: true,
+    });
     io.use(async (socket, next) => {
         const token = socket.handshake.auth.token;
         if(!token) return next(new Error('Unauthorized'));
