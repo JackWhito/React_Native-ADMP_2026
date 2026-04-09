@@ -10,6 +10,7 @@ export interface IChannel extends Document {
     type: ChannelType;
     profile: mongoose.Types.ObjectId[];
     server: mongoose.Types.ObjectId;
+    category?: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -18,6 +19,7 @@ const ChannelSchema = new Schema<IChannel>({
     type: { type: String, enum: Object.values(ChannelType), default: ChannelType.TEXT },
     profile: [{ type: Schema.Types.ObjectId, ref: 'Profile', required: true }],
     server: { type: Schema.Types.ObjectId, ref: 'Server', required: true },
+    category: { type: Schema.Types.ObjectId, ref: "ChannelCategory", required: false },
 }, { timestamps: true });
 
 export const Channel = mongoose.model('Channel', ChannelSchema);
