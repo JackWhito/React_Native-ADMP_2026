@@ -80,6 +80,20 @@ export interface ServerInvite {
   inviteLink: string;
 }
 
+export interface ServerMember {
+  _id: string;
+  name: string;
+  username?: string;
+  imageUrl?: string;
+  role: "admin" | "guest";
+}
+
+export interface ServerMembersPayload {
+  total: number;
+  members: ServerMember[];
+  myRole: "admin" | "guest";
+}
+
 export interface FriendSearchResult {
   _id: string;
   name: string;

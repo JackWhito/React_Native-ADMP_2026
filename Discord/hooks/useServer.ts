@@ -6,6 +6,7 @@ import type {
   ServerChannel,
   ServerChannelList,
   ServerInvite,
+  ServerMembersPayload,
   ServerWithChannels,
 } from "@/types";
 
@@ -39,6 +40,103 @@ export const useCreateServer = () => {
       if (created?._id) {
         await queryClient.invalidateQueries({ queryKey: ["server-channels", created._id] });
       }
+    },
+  });
+};
+
+export const useKickGuestMember = () => {
+  const { apiWithAuth } = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { serverId: string; memberId: string }) => {
+      const { data } = await apiWithAuth<{ kicked: boolean; memberId: string }>({
+        method: "DELETE",
+        url: `/servers/${input.serverId}/members/${input.memberId}`,
+      });
+      return data;
+    },
+    onSuccess: async (_res, vars) => {
+      await queryClient.invalidateQueries({ queryKey: ["server-members", vars.serverId] });
+      await queryClient.invalidateQueries({ queryKey: ["server-channel-list", vars.serverId] });
+      await queryClient.invalidateQueries({ queryKey: ["server-channels", vars.serverId] });
+    },
+  });
+};
+
+export const useGrantMemberAdminRole = () => {
+  const { apiWithAuth } = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { serverId: string; memberId: string }) => {
+      const { data } = await apiWithAuth<{ granted: boolean; memberId: string }>({
+        method: "PATCH",
+        url: `/servers/${input.serverId}/members/${input.memberId}/admin`,
+      });
+      return data;
+    },
+    onSuccess: async (_res, vars) => {
+      await queryClient.invalidateQueries({ queryKey: ["server-members", vars.serverId] });
+    },
+  });
+};
+
+export const useLeaveServer = () => {
+  const { apiWithAuth } = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (serverId: string) => {
+      const { data } = await apiWithAuth<{ left: boolean; serverId: string }>({
+        method: "DELETE",
+        url: `/servers/${serverId}/leave`,
+      });
+      return data;
+    },
+    onSuccess: async (_res, serverId) => {
+      await queryClient.invalidateQueries({ queryKey: ["servers"] });
+      await queryClient.invalidateQueries({ queryKey: ["server-members", serverId] });
+      await queryClient.invalidateQueries({ queryKey: ["server-channel-list", serverId] });
+      await queryClient.invalidateQueries({ queryKey: ["server-channels", serverId] });
+    },
+  });
+};
+
+export const useDeleteServer = () => {
+  const { apiWithAuth } = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (serverId: string) => {
+      const { data } = await apiWithAuth<{ deleted: boolean; serverId: string }>({
+        method: "DELETE",
+        url: `/servers/${serverId}`,
+      });
+      return data;
+    },
+    onSuccess: async (_res, serverId) => {
+      await queryClient.invalidateQueries({ queryKey: ["servers"] });
+      await queryClient.invalidateQueries({ queryKey: ["server-members", serverId] });
+      await queryClient.invalidateQueries({ queryKey: ["server-channel-list", serverId] });
+      await queryClient.invalidateQueries({ queryKey: ["server-channels", serverId] });
+    },
+  });
+};
+
+export const useUpdateServer = () => {
+  const { apiWithAuth } = useApi();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: { serverId: string; name: string; imageUrl?: string }) => {
+      const { data } = await apiWithAuth<Server>({
+        method: "PATCH",
+        url: `/servers/${input.serverId}`,
+        data: { name: input.name, imageUrl: input.imageUrl ?? "" },
+      });
+      return data;
+    },
+    onSuccess: async (_updated, vars) => {
+      await queryClient.invalidateQueries({ queryKey: ["servers"] });
+      await queryClient.invalidateQueries({ queryKey: ["server-channels", vars.serverId] });
+      await queryClient.invalidateQueries({ queryKey: ["server-channel-list", vars.serverId] });
     },
   });
 };
@@ -95,6 +193,43 @@ export const useCreateServerCategory = () => {
   });
 };
 
+export const useUpdateServerCategory = () => {
+  const { apiWithAuth } = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { serverId: string; categoryId: string; name: string }) => {
+      const { data } = await apiWithAuth<ServerCategory>({
+        method: "PATCH",
+        url: `/servers/${input.serverId}/categories/${input.categoryId}`,
+        data: { name: input.name },
+      });
+      return data;
+    },
+    onSuccess: async (_updated, vars) => {
+      await queryClient.invalidateQueries({ queryKey: ["server-channels", vars.serverId] });
+      await queryClient.invalidateQueries({ queryKey: ["server-channel-list", vars.serverId] });
+    },
+  });
+};
+
+export const useDeleteServerCategory = () => {
+  const { apiWithAuth } = useApi();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { serverId: string; categoryId: string }) => {
+      const { data } = await apiWithAuth<{ deleted: boolean; categoryId: string }>({
+        method: "DELETE",
+        url: `/servers/${input.serverId}/categories/${input.categoryId}`,
+      });
+      return data;
+    },
+    onSuccess: async (_res, vars) => {
+      await queryClient.invalidateQueries({ queryKey: ["server-channels", vars.serverId] });
+      await queryClient.invalidateQueries({ queryKey: ["server-channel-list", vars.serverId] });
+    },
+  });
+};
+
 export const useServerInvite = (serverId: string | null | undefined) => {
   const { apiWithAuth } = useApi();
 
@@ -104,6 +239,22 @@ export const useServerInvite = (serverId: string | null | undefined) => {
       const { data } = await apiWithAuth<ServerInvite>({
         method: "GET",
         url: `/servers/${serverId}/invite`,
+      });
+      return data;
+    },
+    enabled: !!serverId,
+  });
+};
+
+export const useServerMembers = (serverId: string | null | undefined) => {
+  const { apiWithAuth } = useApi();
+
+  return useQuery({
+    queryKey: ["server-members", serverId],
+    queryFn: async () => {
+      const { data } = await apiWithAuth<ServerMembersPayload>({
+        method: "GET",
+        url: `/servers/${serverId}/members`,
       });
       return data;
     },

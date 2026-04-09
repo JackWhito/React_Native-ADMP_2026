@@ -1,24 +1,37 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, Pressable, TextInput, Alert, ScrollView } from "react-native";
+import { View, Text, Pressable, TextInput, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCreateServerChannel, useServerChannelList } from "@/hooks/useServer";
+import AppDialogModal from "@/components/modals/AppDialogModal";
 
 export default function CreateChannelScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     serverId?: string | string[];
     serverName?: string | string[];
+    categoryId?: string | string[];
   }>();
   const rawServerId = params.serverId;
   const serverId = Array.isArray(rawServerId) ? rawServerId[0] : rawServerId;
   const rawServerName = params.serverName;
   const serverName = (Array.isArray(rawServerName) ? rawServerName[0] : rawServerName) || "Server";
 
+  const rawInitialCategoryId = params.categoryId;
+  const initialCategoryId = Array.isArray(rawInitialCategoryId)
+    ? rawInitialCategoryId[0]
+    : rawInitialCategoryId;
+
   const [channelName, setChannelName] = useState("");
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(initialCategoryId ?? "");
   const [channelType, setChannelType] = useState<"text" | "audio">("text");
+  const [messageModal, setMessageModal] = useState<{ open: boolean; title: string; message: string }>({
+    open: false,
+    title: "",
+    message: "",
+  });
+  const [closeToBack, setCloseToBack] = useState(false);
 
   const { data: channelList, isLoading: categoriesLoading } = useServerChannelList(serverId);
   const { mutateAsync, isPending } = useCreateServerChannel();
@@ -42,14 +55,31 @@ export default function CreateChannelScreen() {
         type: channelType,
       });
       const label = channelType === "audio" ? "audio channel" : "chat channel";
-      Alert.alert("Channel created", `Created ${label} "${channelName.trim()}" successfully.`);
-      router.back();
+      setMessageModal({
+        open: true,
+        title: "Channel created",
+        message: `Created ${label} "${channelName.trim()}" successfully.`,
+      });
+      setCloseToBack(true);
     } catch (error: any) {
       const message =
         error?.response?.data?.error ??
         error?.message ??
         "Could not create channel. Please try again.";
-      Alert.alert("Create channel failed", String(message));
+      setMessageModal({
+        open: true,
+        title: "Create channel failed",
+        message: String(message),
+      });
+      setCloseToBack(false);
+    }
+  };
+
+  const closeMessageModal = () => {
+    setMessageModal((prev) => ({ ...prev, open: false }));
+    if (closeToBack) {
+      setCloseToBack(false);
+      router.back();
     }
   };
 
@@ -159,6 +189,13 @@ export default function CreateChannelScreen() {
           </Text>
         </Pressable>
       </ScrollView>
+
+      <AppDialogModal
+        visible={messageModal.open}
+        title={messageModal.title}
+        message={messageModal.message}
+        onClose={closeMessageModal}
+      />
     </SafeAreaView>
   );
 }

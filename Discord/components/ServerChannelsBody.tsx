@@ -1,13 +1,49 @@
-import React, { useState, useCallback } from "react";
-import { View, Text, Pressable, ScrollView, ActivityIndicator, Modal, Share, Alert } from "react-native";
+import React, { useState, useCallback, useMemo } from "react";
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  ActivityIndicator,
+  Share,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useServerChannelList, useServerInvite } from "@/hooks/useServer";
+import {
+  useDeleteServer,
+  useServerChannelList,
+  useGrantMemberAdminRole,
+  useKickGuestMember,
+  useLeaveServer,
+  useServerInvite,
+  useServerMembers,
+  useUpdateServer,
+} from "@/hooks/useServer";
 import { useChat } from "@/hooks/useChat";
 import { useCreateServerInviteNotification } from "@/hooks/useNotification";
 import * as Clipboard from "expo-clipboard";
+import * as ImagePicker from "expo-image-picker";
 import type { ServerChannel } from "@/types";
+import AppDialogModal from "@/components/modals/AppDialogModal";
+import ConfirmActionModal from "@/components/modals/ConfirmActionModal";
+import {
+  CategoryActionModal,
+  EditServerModal,
+  InvitePeopleModal,
+  LeaveServerModal,
+  MemberActionModal,
+  MembersModal,
+  SearchModal,
+  ServerMenuModal,
+} from "@/components/modals/server";
+import type { SearchChannelItem } from "@/components/modals/server";
+
+type SimpleDialogState = {
+  open: boolean;
+  title: string;
+  message: string;
+};
 
 function ChannelRow({
   channel,
@@ -40,10 +76,12 @@ function ChannelRow({
 function ChannelSectionDropdown({
   title,
   defaultExpanded = true,
+  onLongPress,
   children,
 }: {
   title: string;
   defaultExpanded?: boolean;
+  onLongPress?: () => void;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultExpanded);
@@ -52,6 +90,8 @@ function ChannelSectionDropdown({
     <View className="mt-0.5">
       <Pressable
         onPress={() => setOpen((v) => !v)}
+        onLongPress={onLongPress}
+        delayLongPress={300}
         className="flex-row items-center px-2 py-2.5 active:bg-zinc-800/40 rounded"
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
@@ -73,6 +113,7 @@ function ChannelSectionDropdown({
 export default function ServerChannelsBody({
   serverId,
   serverName,
+  serverImageUrl,
   onBack,
   onOpenTextChannel,
   onCreateChannel,
@@ -82,6 +123,7 @@ export default function ServerChannelsBody({
 }: {
   serverId: string;
   serverName: string;
+  serverImageUrl?: string;
   onBack: () => void;
   onOpenTextChannel?: (channel: ServerChannel) => void;
   onCreateChannel?: () => void;
@@ -93,11 +135,81 @@ export default function ServerChannelsBody({
   const insets = useSafeAreaInsets();
   const { data: channelList, isLoading, error } = useServerChannelList(serverId);
   const { data: inviteData } = useServerInvite(serverId);
+  const { data: serverMembers, isLoading: membersLoading } = useServerMembers(serverId);
   const { data: conversations, isLoading: friendsLoading } = useChat();
   const createInviteNotification = useCreateServerInviteNotification();
+  const updateServer = useUpdateServer();
+  const grantMemberAdminRole = useGrantMemberAdminRole();
+  const kickGuestMember = useKickGuestMember();
+  const leaveServer = useLeaveServer();
+  const deleteServer = useDeleteServer();
   const [serverMenuOpen, setServerMenuOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [showFriendList, setShowFriendList] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [membersModalOpen, setMembersModalOpen] = useState(false);
+  const [memberActionModalOpen, setMemberActionModalOpen] = useState(false);
+  const [categoryActionModalOpen, setCategoryActionModalOpen] = useState(false);
+  const [leaveConfirmModalOpen, setLeaveConfirmModalOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [simpleDialog, setSimpleDialog] = useState<SimpleDialogState>({
+    open: false,
+    title: "",
+    message: "",
+  });
+  const [kickConfirm, setKickConfirm] = useState<{ open: boolean; memberId: string; memberName: string }>({
+    open: false,
+    memberId: "",
+    memberName: "",
+  });
+  const [activeMember, setActiveMember] = useState<{ id: string; name: string } | null>(null);
+  const [activeCategory, setActiveCategory] = useState<{ id: string; name: string } | null>(null);
+  const [editingName, setEditingName] = useState(serverName);
+  const [editingImageUrl, setEditingImageUrl] = useState(serverImageUrl ?? "");
+  const myRole = serverMembers?.myRole ?? "guest";
+  const isAdmin = myRole === "admin";
+  const showDialog = useCallback((title: string, message: string) => {
+    setSimpleDialog({ open: true, title, message });
+  }, []);
+  const closeDialog = useCallback(() => {
+    setSimpleDialog((prev) => ({ ...prev, open: false }));
+  }, []);
+
+  const searchableChannels = useMemo<SearchChannelItem[]>(
+    () =>
+      (channelList?.categories ?? []).flatMap((cat) =>
+        cat.channels.map((channel) => ({
+          ...channel,
+          categoryName: cat.name,
+        }))
+      ),
+    [channelList?.categories]
+  );
+
+  const normalizedSearch = searchText.trim().toLowerCase();
+  const matchedChannels = useMemo(() => {
+    if (!normalizedSearch) return [];
+    return searchableChannels.filter((channel) => {
+      const name = String(channel.name ?? "").toLowerCase();
+      const category = String(channel.categoryName ?? "").toLowerCase();
+      const type = String(channel.type ?? "").toLowerCase();
+      return (
+        name.includes(normalizedSearch) ||
+        category.includes(normalizedSearch) ||
+        type.includes(normalizedSearch)
+      );
+    });
+  }, [normalizedSearch, searchableChannels]);
+
+  const matchedMembers = useMemo(() => {
+    if (!normalizedSearch) return [];
+    return (serverMembers?.members ?? []).filter((member) => {
+      const name = String(member.name ?? "").toLowerCase();
+      const username = String(member.username ?? "").toLowerCase();
+      return name.includes(normalizedSearch) || username.includes(normalizedSearch);
+    });
+  }, [normalizedSearch, serverMembers?.members]);
 
   const openTextChannel = useCallback(
     (channel: ServerChannel) => {
@@ -144,6 +256,19 @@ export default function ServerChannelsBody({
     setInviteModalOpen(true);
   }, [closeServerMenu, onInvitePeople]);
 
+  const handleQuickInvite = useCallback(() => {
+    setInviteModalOpen(true);
+  }, []);
+
+  const closeSearchModal = useCallback(() => {
+    setSearchModalOpen(false);
+    setSearchText("");
+  }, []);
+
+  const handleSearchChannels = useCallback(() => {
+    setSearchModalOpen(true);
+  }, []);
+
   const handleCreateChannelCategory = useCallback(() => {
     closeServerMenu();
     if (onCreateChannelCategory) {
@@ -158,8 +283,62 @@ export default function ServerChannelsBody({
 
   const handleOpenSettings = useCallback(() => {
     closeServerMenu();
-    onOpenServerSettings?.();
-  }, [closeServerMenu, onOpenServerSettings]);
+    if (onOpenServerSettings) {
+      onOpenServerSettings();
+      return;
+    }
+    setEditingName(serverName);
+    setEditingImageUrl(serverImageUrl ?? "");
+    setSettingsModalOpen(true);
+  }, [closeServerMenu, onOpenServerSettings, serverName, serverImageUrl]);
+
+  const closeSettingsModal = useCallback(() => {
+    setSettingsModalOpen(false);
+  }, []);
+
+  const handleOpenMembersModal = useCallback(() => {
+    closeServerMenu();
+    setMembersModalOpen(true);
+  }, [closeServerMenu]);
+
+  const closeMembersModal = useCallback(() => {
+    setMembersModalOpen(false);
+  }, []);
+
+  const handleSaveSettings = useCallback(async () => {
+    const nextName = editingName.trim();
+    if (!nextName) {
+      showDialog("Invalid name", "Server name cannot be empty.");
+      return;
+    }
+    try {
+      await updateServer.mutateAsync({
+        serverId,
+        name: nextName,
+        imageUrl: editingImageUrl.trim(),
+      });
+      showDialog("Server updated", "Server settings were saved.");
+      closeSettingsModal();
+    } catch (error: any) {
+      const message = error?.response?.data?.error ?? error?.message ?? "Could not update server.";
+      showDialog("Update failed", String(message));
+    }
+  }, [editingImageUrl, editingName, updateServer, serverId, closeSettingsModal, showDialog]);
+
+  const handlePickServerImage = useCallback(async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (result.canceled) return;
+      const picked = result.assets?.[0]?.uri;
+      if (picked) setEditingImageUrl(picked);
+    } catch {
+      showDialog("Image picker failed", "Could not pick image from gallery.");
+    }
+  }, [showDialog]);
 
   const closeInviteModal = useCallback(() => {
     setInviteModalOpen(false);
@@ -169,7 +348,7 @@ export default function ServerChannelsBody({
   const handleShareInviteLink = useCallback(async () => {
     const link = inviteData?.inviteLink;
     if (!link) {
-      Alert.alert("Invite unavailable", "Could not load invite link yet. Please try again.");
+      showDialog("Invite unavailable", "Could not load invite link yet. Please try again.");
       return;
     }
     try {
@@ -178,19 +357,15 @@ export default function ServerChannelsBody({
         message: `Join ${serverName} via invite link: ${link}`,
       });
     } catch {
-      Alert.alert("Share failed", "Could not open share options.");
+      showDialog("Share failed", "Could not open share options.");
     }
-  }, [inviteData?.inviteLink, serverName]);
-
-  const handleInviteFriend = useCallback(() => {
-    setShowFriendList(true);
-  }, []);
+  }, [inviteData?.inviteLink, serverName, showDialog]);
 
   const handleInviteSpecificFriend = useCallback(
     async (friendId: string, friendName: string) => {
       try {
         await createInviteNotification.mutateAsync({ serverId, recipientId: friendId });
-        Alert.alert(
+        showDialog(
           "Invite sent",
           `${friendName} will get a notification and can join after accepting.`
         );
@@ -199,21 +374,143 @@ export default function ServerChannelsBody({
           error?.response?.data?.error ??
           error?.message ??
           "Could not send invite request.";
-        Alert.alert("Invite failed", String(message));
+        showDialog("Invite failed", String(message));
       }
     },
-    [createInviteNotification, serverId]
+    [createInviteNotification, serverId, showDialog]
   );
 
   const handleCopyInviteLink = useCallback(async () => {
     const link = inviteData?.inviteLink;
     if (!link) {
-      Alert.alert("Invite unavailable", "Could not load invite link yet. Please try again.");
+      showDialog("Invite unavailable", "Could not load invite link yet. Please try again.");
       return;
     }
     await Clipboard.setStringAsync(link);
-    Alert.alert("Copied", "Invite link copied to clipboard.");
-  }, [inviteData?.inviteLink]);
+    showDialog("Copied", "Invite link copied to clipboard.");
+  }, [inviteData?.inviteLink, showDialog]);
+
+  const handleLeaveServer = useCallback(() => {
+    closeServerMenu();
+    setLeaveConfirmModalOpen(true);
+  }, [closeServerMenu]);
+
+  const closeLeaveConfirmModal = useCallback(() => {
+    setLeaveConfirmModalOpen(false);
+  }, []);
+
+  const handleConfirmLeaveServer = useCallback(async () => {
+    try {
+      if (isAdmin) {
+        await deleteServer.mutateAsync(serverId);
+      } else {
+        await leaveServer.mutateAsync(serverId);
+      }
+      closeLeaveConfirmModal();
+      showDialog(
+        isAdmin ? "Server deleted" : "Left server",
+        isAdmin ? `${serverName} was deleted.` : `You left ${serverName}.`
+      );
+      onBack();
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.error ??
+        error?.message ??
+        (isAdmin ? "Could not delete server." : "Could not leave server.");
+      showDialog(isAdmin ? "Delete failed" : "Leave failed", String(message));
+    }
+  }, [deleteServer, isAdmin, leaveServer, serverId, closeLeaveConfirmModal, serverName, onBack, showDialog]);
+
+  const handleKickGuest = useCallback(
+    (memberId: string, memberName: string) => {
+      setKickConfirm({ open: true, memberId, memberName });
+    },
+    []
+  );
+
+  const handleOpenMemberActions = useCallback(
+    (memberId: string, memberName: string) => {
+      setActiveMember({ id: memberId, name: memberName });
+      setMemberActionModalOpen(true);
+    },
+    []
+  );
+
+  const closeMemberActionModal = useCallback(() => {
+    setMemberActionModalOpen(false);
+    setActiveMember(null);
+  }, []);
+
+  const handleGrantAdminFromModal = useCallback(async () => {
+    if (!activeMember) return;
+    try {
+      await grantMemberAdminRole.mutateAsync({ serverId, memberId: activeMember.id });
+      showDialog("Role updated", `${activeMember.name} is now an admin.`);
+      closeMemberActionModal();
+    } catch (error: any) {
+      const message = error?.response?.data?.error ?? error?.message ?? "Could not grant admin role.";
+      showDialog("Update failed", String(message));
+    }
+  }, [activeMember, grantMemberAdminRole, serverId, closeMemberActionModal, showDialog]);
+
+  const handleKickFromModal = useCallback(() => {
+    if (!activeMember) return;
+    closeMemberActionModal();
+    handleKickGuest(activeMember.id, activeMember.name);
+  }, [activeMember, closeMemberActionModal, handleKickGuest]);
+
+  const closeKickConfirm = useCallback(() => {
+    setKickConfirm((prev) => ({ ...prev, open: false }));
+  }, []);
+
+  const handleConfirmKick = useCallback(async () => {
+    if (!kickConfirm.memberId) return;
+    try {
+      await kickGuestMember.mutateAsync({ serverId, memberId: kickConfirm.memberId });
+      closeKickConfirm();
+      showDialog("Member removed", `${kickConfirm.memberName} has been removed.`);
+    } catch (error: any) {
+      const message = error?.response?.data?.error ?? error?.message ?? "Could not kick member.";
+      showDialog("Kick failed", String(message));
+    }
+  }, [kickConfirm.memberId, kickConfirm.memberName, kickGuestMember, serverId, closeKickConfirm, showDialog]);
+
+  const handleOpenCategoryActions = useCallback(
+    (categoryId: string, categoryName: string) => {
+      if (!isAdmin) return;
+      setActiveCategory({ id: categoryId, name: categoryName });
+      setCategoryActionModalOpen(true);
+    },
+    [isAdmin]
+  );
+
+  const closeCategoryActionModal = useCallback(() => {
+    setCategoryActionModalOpen(false);
+    setActiveCategory(null);
+  }, []);
+
+  const handleCreateChannelFromCategory = useCallback(() => {
+    if (!activeCategory) return;
+    closeCategoryActionModal();
+    router.push({
+      pathname: "/server/create-channel",
+      params: { serverId, serverName, categoryId: activeCategory.id },
+    });
+  }, [activeCategory, closeCategoryActionModal, router, serverId, serverName]);
+
+  const handleEditCategory = useCallback(() => {
+    if (!activeCategory) return;
+    closeCategoryActionModal();
+    router.push({
+      pathname: "/server/edit-category",
+      params: {
+        serverId,
+        serverName,
+        categoryId: activeCategory.id,
+        categoryName: activeCategory.name,
+      },
+    });
+  }, [activeCategory, closeCategoryActionModal, router, serverId, serverName]);
 
   return (
     <View className="flex-1 bg-background">
@@ -243,6 +540,28 @@ export default function ServerChannelsBody({
         </Pressable>
         <View style={{ width: 36 }} />
       </View>
+      <View className="flex-row items-center gap-2 px-3 py-2 bg-[#2B2D31] border-b border-[#1E1F22]">
+        <Pressable
+          className="h-10 rounded-full bg-zinc-800/80 border border-zinc-700 items-center justify-center active:opacity-80"
+          style={{ flex: 3 }}
+          onPress={handleSearchChannels}
+        >
+          <View className="flex-row items-center">
+            <Ionicons name="search-outline" size={16} color="#DBDEE1" />
+            <Text className="text-[#DBDEE1] text-sm font-semibold ml-1.5">Search</Text>
+          </View>
+        </Pressable>
+        <Pressable
+          className="h-10 rounded-full bg-indigo-500/20 border border-indigo-400/40 items-center justify-center active:opacity-80"
+          style={{ flex: 1 }}
+          onPress={handleQuickInvite}
+        >
+          <View className="flex-row items-center">
+            <Ionicons name="person-add-outline" size={16} color="#C7D2FE" />
+            <Text className="text-indigo-200 text-sm font-semibold ml-1.5">Invite</Text>
+          </View>
+        </Pressable>
+      </View>
 
       {isLoading ? (
         <View className="flex-1 items-center justify-center py-12">
@@ -259,7 +578,12 @@ export default function ServerChannelsBody({
           showsVerticalScrollIndicator={false}
         >
           {(channelList?.categories ?? []).map((cat) => (
-            <ChannelSectionDropdown key={cat._id} title={cat.name.toUpperCase()} defaultExpanded>
+            <ChannelSectionDropdown
+              key={cat._id}
+              title={cat.name.toUpperCase()}
+              defaultExpanded
+              onLongPress={() => handleOpenCategoryActions(cat._id, cat.name)}
+            >
               {cat.channels.map((c) => (
                 <ChannelRow key={c._id} channel={c} onTextChannelPress={openTextChannel} />
               ))}
@@ -271,164 +595,122 @@ export default function ServerChannelsBody({
         </ScrollView>
       )}
 
-      <Modal
+      <ServerMenuModal
         visible={serverMenuOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={closeServerMenu}
-      >
-        <Pressable
-          className="flex-1 bg-black/50 justify-end"
-          onPress={closeServerMenu}
-          accessibilityRole="button"
-          accessibilityLabel="Close server settings modal"
-        >
-          <Pressable
-            className="bg-[#2B2D31] border-t border-[#1E1F22] px-4 pt-3 pb-6"
-            onPress={() => {}}
-          >
-            <Text className="text-[#949BA4] text-xs font-semibold mb-2">SERVER</Text>
+        isAdmin={isAdmin}
+        leavePending={leaveServer.isPending}
+        deletePending={deleteServer.isPending}
+        onClose={closeServerMenu}
+        onCreateChannel={handleCreateChannel}
+        onCreateChannelCategory={handleCreateChannelCategory}
+        onInvitePeople={handleInvitePeople}
+        onOpenSettings={handleOpenSettings}
+        onOpenMembers={handleOpenMembersModal}
+        onLeaveOrDelete={handleLeaveServer}
+      />
 
-            <Pressable
-              className="flex-row items-center px-3 py-3 rounded-md active:bg-zinc-700/60"
-              onPress={handleCreateChannel}
-            >
-              <Ionicons name="add-circle-outline" size={18} color="#DBDEE1" />
-              <Text className="text-[#DBDEE1] text-[15px] ml-3">Create channel</Text>
-            </Pressable>
+      <SearchModal
+        visible={searchModalOpen}
+        searchText={searchText}
+        setSearchText={setSearchText}
+        normalizedSearch={normalizedSearch}
+        matchedChannels={matchedChannels}
+        matchedMembers={matchedMembers}
+        onClose={closeSearchModal}
+        onOpenChannel={(channel) => {
+          closeSearchModal();
+          openTextChannel(channel);
+        }}
+      />
 
-            <Pressable
-              className="flex-row items-center px-3 py-3 rounded-md active:bg-zinc-700/60"
-              onPress={handleCreateChannelCategory}
-            >
-              <Ionicons name="folder-open-outline" size={18} color="#DBDEE1" />
-              <Text className="text-[#DBDEE1] text-[15px] ml-3">Create channel category</Text>
-            </Pressable>
-
-            <Pressable
-              className="flex-row items-center px-3 py-3 rounded-md active:bg-zinc-700/60"
-              onPress={handleInvitePeople}
-            >
-              <Ionicons name="person-add-outline" size={18} color="#DBDEE1" />
-              <Text className="text-[#DBDEE1] text-[15px] ml-3">Invite people</Text>
-            </Pressable>
-
-            <Pressable
-              className="flex-row items-center px-3 py-3 rounded-md active:bg-zinc-700/60"
-              onPress={handleOpenSettings}
-            >
-              <Ionicons name="settings-outline" size={18} color="#DBDEE1" />
-              <Text className="text-[#DBDEE1] text-[15px] ml-3">Settings</Text>
-            </Pressable>
-
-            <Pressable
-              className="mt-2 px-3 py-3 rounded-md active:bg-zinc-700/60"
-              onPress={closeServerMenu}
-            >
-              <Text className="text-[#949BA4] text-[15px]">Cancel</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
+      <InvitePeopleModal
         visible={inviteModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={closeInviteModal}
-      >
-        <Pressable
-          className="flex-1 bg-black/50 justify-end"
-          onPress={closeInviteModal}
-          accessibilityRole="button"
-          accessibilityLabel="Close invite modal"
-        >
-          <Pressable
-            className="bg-[#2B2D31] border-t border-[#1E1F22] px-4 pt-3 pb-6"
-            onPress={() => {}}
-          >
-            <Text className="text-[#F2F3F5] text-base font-semibold mb-1">Invite people</Text>
-            <Text className="text-[#949BA4] text-xs mb-4" numberOfLines={1}>
-              {serverName}
-            </Text>
+        serverName={serverName}
+        inviteData={inviteData}
+        showFriendList={showFriendList}
+        setShowFriendList={setShowFriendList}
+        friendsLoading={friendsLoading}
+        conversations={(conversations ?? []).map((c) => ({
+          _id: c._id,
+          member: {
+            _id: String(c.member._id),
+            name: c.member.name,
+            username: c.member.username,
+          },
+        }))}
+        onClose={closeInviteModal}
+        onShareInviteLink={handleShareInviteLink}
+        onCopyInviteLink={handleCopyInviteLink}
+        onInviteSpecificFriend={handleInviteSpecificFriend}
+      />
 
-            <Text className="text-[#949BA4] text-xs font-semibold mb-2">INVITE LINK</Text>
-            <View className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-3 mb-2">
-              <Text className="text-zinc-200 text-[13px]" numberOfLines={2}>
-                {inviteData?.inviteLink ?? "Loading invite link..."}
-              </Text>
-            </View>
-            <Pressable
-              className="flex-row items-center px-3 py-3 rounded-md active:bg-zinc-700/60 mb-3"
-              onPress={handleShareInviteLink}
-            >
-              <Ionicons name="link-outline" size={18} color="#DBDEE1" />
-              <Text className="text-[#DBDEE1] text-[15px] ml-3">Share invite link</Text>
-            </Pressable>
-            <Pressable
-              className="flex-row items-center px-3 py-3 rounded-md active:bg-zinc-700/60 mb-3"
-              onPress={handleCopyInviteLink}
-            >
-              <Ionicons name="copy-outline" size={18} color="#DBDEE1" />
-              <Text className="text-[#DBDEE1] text-[15px] ml-3">Copy invite link</Text>
-            </Pressable>
+      <EditServerModal
+        visible={settingsModalOpen}
+        editingName={editingName}
+        setEditingName={setEditingName}
+        editingImageUrl={editingImageUrl}
+        setEditingImageUrl={setEditingImageUrl}
+        saving={updateServer.isPending}
+        onPickImage={handlePickServerImage}
+        onSave={handleSaveSettings}
+        onClose={closeSettingsModal}
+      />
 
-            <Text className="text-[#949BA4] text-xs font-semibold mb-2">INVITE FRIEND</Text>
-            {!showFriendList ? (
-              <Pressable
-                className="flex-row items-center px-3 py-3 rounded-md active:bg-zinc-700/60"
-                onPress={handleInviteFriend}
-              >
-                <Ionicons name="person-add-outline" size={18} color="#DBDEE1" />
-                <Text className="text-[#DBDEE1] text-[15px] ml-3">Invite friend</Text>
-              </Pressable>
-            ) : (
-              <View className="rounded-md border border-zinc-700 bg-zinc-800 p-2">
-                {friendsLoading ? (
-                  <View className="py-4 items-center">
-                    <ActivityIndicator color="#949BA4" />
-                  </View>
-                ) : !(conversations?.length ?? 0) ? (
-                  <Text className="text-zinc-400 text-sm px-2 py-3">No friends available.</Text>
-                ) : (
-                  <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
-                    {conversations?.map((c) => (
-                      <View
-                        key={c._id}
-                        className="flex-row items-center justify-between px-2 py-2 rounded-md"
-                      >
-                        <View className="flex-1 pr-2">
-                          <Text className="text-zinc-100 text-sm font-semibold" numberOfLines={1}>
-                            {c.member.name}
-                          </Text>
-                          <Text className="text-zinc-400 text-xs" numberOfLines={1}>
-                            @{c.member.username ?? "unknown"}
-                          </Text>
-                        </View>
-                        <Pressable
-                          className="px-3 py-2 rounded bg-indigo-500 active:opacity-80"
-                          onPress={() =>
-                            handleInviteSpecificFriend(String(c.member._id), c.member.name)
-                          }
-                        >
-                          <Text className="text-white text-xs font-semibold">Invite</Text>
-                        </Pressable>
-                      </View>
-                    ))}
-                  </ScrollView>
-                )}
-              </View>
-            )}
+      <MembersModal
+        visible={membersModalOpen}
+        membersLoading={membersLoading}
+        serverMembers={serverMembers}
+        isAdmin={isAdmin}
+        actionPending={kickGuestMember.isPending || grantMemberAdminRole.isPending}
+        onClose={closeMembersModal}
+        onOpenMemberActions={handleOpenMemberActions}
+      />
 
-            <Pressable
-              className="mt-3 px-3 py-3 rounded-md active:bg-zinc-700/60"
-              onPress={closeInviteModal}
-            >
-              <Text className="text-[#949BA4] text-[15px]">Close</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <CategoryActionModal
+        visible={categoryActionModalOpen}
+        categoryName={activeCategory?.name}
+        onClose={closeCategoryActionModal}
+        onCreateChannel={handleCreateChannelFromCategory}
+        onEdit={handleEditCategory}
+      />
+
+      <MemberActionModal
+        visible={memberActionModalOpen}
+        memberName={activeMember?.name}
+        grantPending={grantMemberAdminRole.isPending}
+        kickPending={kickGuestMember.isPending}
+        onClose={closeMemberActionModal}
+        onGrantAdmin={handleGrantAdminFromModal}
+        onKick={handleKickFromModal}
+      />
+
+      <LeaveServerModal
+        visible={leaveConfirmModalOpen}
+        isAdmin={isAdmin}
+        serverName={serverName}
+        leavePending={leaveServer.isPending}
+        deletePending={deleteServer.isPending}
+        onClose={closeLeaveConfirmModal}
+        onConfirm={handleConfirmLeaveServer}
+      />
+
+      <ConfirmActionModal
+        visible={kickConfirm.open}
+        title="Kick member"
+        message={`Kick ${kickConfirm.memberName} from ${serverName}?`}
+        confirmLabel="Kick"
+        confirmIcon="person-remove-outline"
+        onConfirm={handleConfirmKick}
+        confirmPending={kickGuestMember.isPending}
+        onCancel={closeKickConfirm}
+      />
+
+      <AppDialogModal
+        visible={simpleDialog.open}
+        title={simpleDialog.title}
+        message={simpleDialog.message}
+        onClose={closeDialog}
+      />
     </View>
   );
 }

@@ -48,6 +48,10 @@ export default function RootLayout() {
                     options={{ animation: "slide_from_right" }}
                   />
                   <Stack.Screen
+                    name="server/edit-category"
+                    options={{ animation: "slide_from_right" }}
+                  />
+                  <Stack.Screen
                     name="invite/[code]"
                     options={{ animation: "fade" }}
                   />
