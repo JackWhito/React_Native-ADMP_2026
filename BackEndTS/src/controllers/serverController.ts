@@ -4,6 +4,7 @@ import { Profile } from "../models/Profile";
 import { Server } from "../models/Server";
 import { Channel } from "../models/Channel";
 import { ChannelCategory } from "../models/ChannelCategory";
+import { Notification } from "../models/Notification";
 import mongoose from "mongoose";
 
 function generateInviteCode(length = 10) {
@@ -68,6 +69,7 @@ export async function createServer(req: AuthRequest, res: Response, next: NextFu
       imageUrl: typeof imageUrl === "string" ? imageUrl : "",
       inviteCode,
       participants: [profile._id],
+      admins: [profile._id],
     });
 
     const participantIds = [profile._id];
@@ -103,6 +105,214 @@ export async function createServer(req: AuthRequest, res: Response, next: NextFu
       categories: [chatCategory.toObject(), voiceCategory.toObject()],
       channels: [textChannel.toObject(), audioChannel.toObject()],
     });
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+export async function updateServer(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  const serverId = (req.params as { serverId?: string }).serverId;
+  const { name, imageUrl } = (req.body ?? {}) as { name?: string; imageUrl?: string };
+  try {
+    if (!serverId || !mongoose.Types.ObjectId.isValid(serverId)) {
+      return res.status(400).json({ error: "Invalid server id" });
+    }
+
+    const server = await Server.findOne({ _id: serverId, participants: userId });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+
+    if (typeof name === "string") {
+      if (!name.trim()) return res.status(400).json({ error: "Server name cannot be empty" });
+      server.name = name.trim();
+    }
+    if (typeof imageUrl === "string") {
+      server.imageUrl = imageUrl.trim();
+    }
+
+    await server.save();
+    return res.status(200).json(server);
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+export async function getServerMembers(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  const serverId = (req.params as { serverId?: string }).serverId;
+  try {
+    if (!serverId || !mongoose.Types.ObjectId.isValid(serverId)) {
+      return res.status(400).json({ error: "Invalid server id" });
+    }
+    const server = await Server.findOne({ _id: serverId, participants: userId })
+      .populate("participants", "name username imageUrl")
+      .lean();
+    if (!server) return res.status(404).json({ error: "Server not found" });
+
+    const admins = Array.isArray((server as any).admins)
+      ? (server as any).admins.map((id: any) => String(id))
+      : [];
+    const members = Array.isArray(server.participants)
+      ? (server.participants as any[]).map((m: any) => {
+          const id = String(m?._id ?? m);
+          return {
+            _id: id,
+            name: m?.name ?? "",
+            username: m?.username ?? "",
+            imageUrl: m?.imageUrl ?? "",
+            role: admins.includes(id) ? "admin" : "guest",
+          };
+        })
+      : [];
+    const myRole = admins.includes(String(userId)) ? "admin" : "guest";
+
+    return res.status(200).json({
+      total: members.length,
+      members,
+      myRole,
+    });
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+export async function leaveServer(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  const serverId = (req.params as { serverId?: string }).serverId;
+  try {
+    if (!serverId || !mongoose.Types.ObjectId.isValid(serverId)) {
+      return res.status(400).json({ error: "Invalid server id" });
+    }
+    const server = await Server.findOne({ _id: serverId, participants: userId });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+
+    server.participants = server.participants.filter((p) => String(p) !== String(userId));
+    server.admins = (server.admins ?? []).filter((p) => String(p) !== String(userId));
+
+    await Channel.updateMany(
+      { server: server._id, profile: userId },
+      { $pull: { profile: userId } }
+    );
+
+    await server.save();
+    return res.status(200).json({ left: true, serverId: String(server._id) });
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+export async function deleteServer(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  const serverId = (req.params as { serverId?: string }).serverId;
+  try {
+    if (!serverId || !mongoose.Types.ObjectId.isValid(serverId)) {
+      return res.status(400).json({ error: "Invalid server id" });
+    }
+
+    const server = await Server.findOne({ _id: serverId, participants: userId });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+
+    const isRequesterAdmin = (server.admins ?? []).some((id) => String(id) === String(userId));
+    if (!isRequesterAdmin) {
+      return res.status(403).json({ error: "Only admins can delete this server" });
+    }
+
+    await Promise.all([
+      Channel.deleteMany({ server: server._id }),
+      ChannelCategory.deleteMany({ server: server._id }),
+      Notification.deleteMany({ server: server._id }),
+      Server.deleteOne({ _id: server._id }),
+    ]);
+
+    return res.status(200).json({ deleted: true, serverId: String(server._id) });
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+export async function kickGuestMember(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  const serverId = (req.params as { serverId?: string }).serverId;
+  const memberId = (req.params as { memberId?: string }).memberId;
+  try {
+    if (!serverId || !mongoose.Types.ObjectId.isValid(serverId)) {
+      return res.status(400).json({ error: "Invalid server id" });
+    }
+    if (!memberId || !mongoose.Types.ObjectId.isValid(memberId)) {
+      return res.status(400).json({ error: "Invalid member id" });
+    }
+
+    const server = await Server.findOne({ _id: serverId, participants: userId });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+
+    const isRequesterAdmin = (server.admins ?? []).some((id) => String(id) === String(userId));
+    if (!isRequesterAdmin) {
+      return res.status(403).json({ error: "Only admins can kick members" });
+    }
+    if (String(memberId) === String(userId)) {
+      return res.status(400).json({ error: "Use leave server to remove yourself" });
+    }
+
+    const isMember = server.participants.some((id) => String(id) === String(memberId));
+    if (!isMember) return res.status(404).json({ error: "Member not found in this server" });
+
+    const isTargetAdmin = (server.admins ?? []).some((id) => String(id) === String(memberId));
+    if (isTargetAdmin) {
+      return res.status(403).json({ error: "Cannot kick admin members" });
+    }
+
+    server.participants = server.participants.filter((p) => String(p) !== String(memberId));
+    await Channel.updateMany(
+      { server: server._id, profile: memberId },
+      { $pull: { profile: memberId } }
+    );
+    await server.save();
+
+    return res.status(200).json({ kicked: true, memberId: String(memberId) });
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+export async function grantMemberAdminRole(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) {
+  const userId = req.profileId;
+  const serverId = (req.params as { serverId?: string }).serverId;
+  const memberId = (req.params as { memberId?: string }).memberId;
+  try {
+    if (!serverId || !mongoose.Types.ObjectId.isValid(serverId)) {
+      return res.status(400).json({ error: "Invalid server id" });
+    }
+    if (!memberId || !mongoose.Types.ObjectId.isValid(memberId)) {
+      return res.status(400).json({ error: "Invalid member id" });
+    }
+
+    const server = await Server.findOne({ _id: serverId, participants: userId });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+
+    const isRequesterAdmin = (server.admins ?? []).some((id) => String(id) === String(userId));
+    if (!isRequesterAdmin) {
+      return res.status(403).json({ error: "Only admins can grant admin role" });
+    }
+
+    const isMember = server.participants.some((id) => String(id) === String(memberId));
+    if (!isMember) return res.status(404).json({ error: "Member not found in this server" });
+
+    if (!(server.admins ?? []).some((id) => String(id) === String(memberId))) {
+      server.admins = [...(server.admins ?? []), new mongoose.Types.ObjectId(String(memberId))];
+      await server.save();
+    }
+
+    return res.status(200).json({ granted: true, memberId: String(memberId) });
   } catch (error) {
     res.status(500);
     next(error);
@@ -221,6 +431,93 @@ export async function createServerCategory(
     });
 
     return res.status(201).json(category);
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+export async function updateServerCategory(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) {
+  const userId = req.profileId;
+  const serverId = (req.params as { serverId?: string }).serverId;
+  const categoryId = (req.params as { categoryId?: string }).categoryId;
+  const { name } = (req.body ?? {}) as { name?: string };
+  try {
+    if (!serverId || !mongoose.Types.ObjectId.isValid(serverId)) {
+      return res.status(400).json({ error: "Invalid server id" });
+    }
+    if (!categoryId || !mongoose.Types.ObjectId.isValid(categoryId)) {
+      return res.status(400).json({ error: "Invalid category id" });
+    }
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ error: "Category name is required" });
+    }
+
+    const server = await Server.findOne({ _id: serverId, participants: userId });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+
+    const isRequesterAdmin = (server.admins ?? []).some((id) => String(id) === String(userId));
+    if (!isRequesterAdmin) {
+      return res.status(403).json({ error: "Only admins can edit categories" });
+    }
+
+    const category = await ChannelCategory.findOne({ _id: categoryId, server: serverId });
+    if (!category) return res.status(404).json({ error: "Category not found in this server" });
+
+    const categoryName = name.trim();
+    const existing = await ChannelCategory.findOne({
+      _id: { $ne: category._id },
+      server: serverId,
+      name: new RegExp(`^${categoryName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+    });
+    if (existing) return res.status(409).json({ error: "Category already exists" });
+
+    category.name = categoryName;
+    await category.save();
+    return res.status(200).json(category);
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+export async function deleteServerCategory(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) {
+  const userId = req.profileId;
+  const serverId = (req.params as { serverId?: string }).serverId;
+  const categoryId = (req.params as { categoryId?: string }).categoryId;
+  try {
+    if (!serverId || !mongoose.Types.ObjectId.isValid(serverId)) {
+      return res.status(400).json({ error: "Invalid server id" });
+    }
+    if (!categoryId || !mongoose.Types.ObjectId.isValid(categoryId)) {
+      return res.status(400).json({ error: "Invalid category id" });
+    }
+
+    const server = await Server.findOne({ _id: serverId, participants: userId });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+
+    const isRequesterAdmin = (server.admins ?? []).some((id) => String(id) === String(userId));
+    if (!isRequesterAdmin) {
+      return res.status(403).json({ error: "Only admins can delete categories" });
+    }
+
+    const category = await ChannelCategory.findOne({ _id: categoryId, server: serverId });
+    if (!category) return res.status(404).json({ error: "Category not found in this server" });
+
+    await Promise.all([
+      Channel.deleteMany({ server: serverId, category: category._id }),
+      ChannelCategory.deleteOne({ _id: category._id }),
+    ]);
+
+    return res.status(200).json({ deleted: true, categoryId: String(category._id) });
   } catch (error) {
     res.status(500);
     next(error);

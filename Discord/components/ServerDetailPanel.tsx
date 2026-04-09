@@ -15,6 +15,7 @@ export default function ServerDetailPanel({
     <ServerChannelsBody
       serverId={server._id}
       serverName={server.name}
+      serverImageUrl={server.imageUrl}
       onBack={onBackToChats}
       onOpenTextChannel={onOpenTextChannel}
     />
