@@ -1,6 +1,7 @@
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useMemo, useState } from "react";
+import { useRouter } from "expo-router";
 import NavigationSideBar from "../navigation/NavigationSideBar";
 import ChatItem from "@/components/ChatItem";
 import { useChat } from "@/hooks/useChat";
@@ -12,6 +13,7 @@ import ChatDetailModal from "@/components/ChatDetailModal";
 import type { ChatDetailTarget } from "@/components/ChatDetailContent";
 
 const ChatTab = () => {
+  const router = useRouter();
   const { data: conversations, isLoading, error } = useChat();
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
@@ -114,6 +116,7 @@ const ChatTab = () => {
                   <TouchableOpacity
                     activeOpacity={0.7}
                     className="ml-[8px] flex-row items-center justify-center bg-sidebar rounded-[24px] w-[240px] h-[38px]"
+                    onPress={() => router.push("/friends/add")}
                   >
                     <Ionicons name="person-add" size={18} color="white" />
                     <Text className="text-white ml-[12px]">Add Friends</Text>

@@ -7,6 +7,7 @@ import orderRoutes from './routes/chatRoutes';
 import serverRoutes from './routes/serverRoutes';
 import conversationRoutes from './routes/conversationRoutes';
 import adminRoutes from './routes/adminRoutes';
+import notificationRoutes from './routes/notificationRoutes';
 
 import { clerkMiddleware } from '@clerk/express';
 import { errorHandler } from './middleware/errorHandler';
@@ -29,6 +30,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/servers", serverRoutes);
 app.use("/api/conversations", conversationRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 
 app.use(errorHandler);

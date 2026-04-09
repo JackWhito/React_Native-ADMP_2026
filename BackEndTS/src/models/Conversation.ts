@@ -11,7 +11,7 @@ export interface IConversation extends Document {
 const ConversationSchema = new Schema<IConversation>({
     memberOne: { type: Schema.Types.ObjectId, ref: 'Profile', required: true },
     memberTwo: { type: Schema.Types.ObjectId, ref: 'Profile', required: true },
-    lastMessage: { type: Schema.Types.ObjectId, ref: 'Message', default: null },
+    lastMessage: { type: Schema.Types.ObjectId, ref: 'DirectMessage', default: null },
     lastMessageAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 

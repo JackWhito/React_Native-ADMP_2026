@@ -48,9 +48,9 @@ export async function getConversations(req: AuthRequest, res: Response, next: Ne
         {memberOne: userId},
         {memberTwo: userId}
       ]
-    }).populate("memberOne", "name email imageUrl")
-    .populate("memberTwo", "name email imageUrl")
-    .populate("lastMessage", "text sender createdAt")
+    }).populate("memberOne", "name username email imageUrl")
+    .populate("memberTwo", "name username email imageUrl")
+    .populate("lastMessage", "content member createdAt")
     .sort({lastMessageAt:-1});
 
     const formatted = conversations.map(conversation => {

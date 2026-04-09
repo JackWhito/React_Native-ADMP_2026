@@ -39,6 +39,22 @@ export default function RootLayout() {
                     name="server/[id]"
                     options={{ animation: "slide_from_right" }}
                   />
+                  <Stack.Screen
+                    name="server/create-category"
+                    options={{ animation: "slide_from_right" }}
+                  />
+                  <Stack.Screen
+                    name="server/create-channel"
+                    options={{ animation: "slide_from_right" }}
+                  />
+                  <Stack.Screen
+                    name="invite/[code]"
+                    options={{ animation: "fade" }}
+                  />
+                  <Stack.Screen
+                    name="friends/add"
+                    options={{ animation: "slide_from_right" }}
+                  />
                 </Stack>
                 <PortalHost />
               </View>
