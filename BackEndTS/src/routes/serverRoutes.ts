@@ -17,6 +17,7 @@ import {
   leaveServer,
   updateServerCategory,
   updateServer,
+  reportServer,
 } from "../controllers/serverController";
 
 
@@ -26,6 +27,7 @@ router.get("/:serverId/channels", protectRoute, getServerChannels);
 router.get("/:serverId/channel-list", protectRoute, getServerChannelList);
 router.get("/:serverId/invite", protectRoute, getServerInvite);
 router.get("/:serverId/members", protectRoute, getServerMembers);
+router.post("/:serverId/report", protectRoute, reportServer);
 router.patch("/:serverId", protectRoute, updateServer);
 router.patch("/:serverId/members/:memberId/admin", protectRoute, grantMemberAdminRole);
 router.delete("/:serverId", protectRoute, deleteServer);
