@@ -1,0 +1,77 @@
+{
+  "expo": {
+    "name": "Discord",
+    "slug": "Discord",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "backgroundColor": "#0D0D0F",
+    "icon": "./assets/images/app-icon-bg.png",
+    "scheme": "discord",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow Discord to access your photo library so you can pick and send images in chat."
+      }
+    },
+    "android": {
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#0D0D0F",
+        "foregroundImage": "./assets/images/discord-logo.png",
+        "monochromeImage": "./assets/images/discord-logo.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.Discord"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/discord-logo.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/discord-logo-splash.png",
+          "imageWidth": 260,
+          "resizeMode": "contain",
+          "backgroundColor": "#0D0D0F",
+          "dark": {
+            "backgroundColor": "#0D0D0F"
+          }
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Discord to access your photo library so you can pick and send images in chat.",
+          "savePhotosPermission": "Allow Discord to save photos to your library."
+        }
+      ],
+      "expo-secure-store",
+      "expo-web-browser",
+      "@clerk/expo"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "428ef4a7-10e6-4d19-8ba3-d51ce244952a"
+      }
+    },
+    "owner": "mitoexpodev"
+  }
+}

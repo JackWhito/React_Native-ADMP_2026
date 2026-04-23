@@ -5,7 +5,9 @@ import { Server } from "../models/Server";
 import { Channel } from "../models/Channel";
 import { ChannelCategory } from "../models/ChannelCategory";
 import { Notification } from "../models/Notification";
+import { AdminServerReport, type AdminServerReportCategory } from "../models/AdminServerReport";
 import mongoose from "mongoose";
+import { emitAdminDataChanged } from "../utils/socket";
 
 function generateInviteCode(length = 10) {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -68,6 +70,7 @@ export async function createServer(req: AuthRequest, res: Response, next: NextFu
       name: name.trim(),
       imageUrl: typeof imageUrl === "string" ? imageUrl : "",
       inviteCode,
+      createdBy: profile._id,
       participants: [profile._id],
       admins: [profile._id],
     });
@@ -100,6 +103,7 @@ export async function createServer(req: AuthRequest, res: Response, next: NextFu
     });
 
     const serverObj = server.toObject();
+    emitAdminDataChanged(["servers", "dashboard", "news"]);
     res.status(201).json({
       ...serverObj,
       categories: [chatCategory.toObject(), voiceCategory.toObject()],
@@ -628,6 +632,89 @@ export async function joinServerByInvite(req: AuthRequest, res: Response, next: 
       joined: !alreadyJoined,
       serverId: String(server._id),
       serverName: server.name,
+    });
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+export async function reportServer(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  const serverId = (req.params as { serverId?: string }).serverId;
+  const { reason, category, details } = (req.body ?? {}) as {
+    reason?: string;
+    category?: AdminServerReportCategory;
+    details?: string;
+  };
+  try {
+    if (!serverId || !mongoose.Types.ObjectId.isValid(serverId)) {
+      return res.status(400).json({ error: "Invalid server id" });
+    }
+
+    const server = await Server.findOne({ _id: serverId, participants: userId });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+
+    const isRequesterAdmin = (server.admins ?? []).some((id) => String(id) === String(userId));
+    if (isRequesterAdmin) {
+      return res.status(403).json({ error: "Server admins cannot report this server" });
+    }
+
+    const normalizedCategory = String(category ?? "other").trim().toLowerCase();
+    const allowedCategories: AdminServerReportCategory[] = [
+      "spam",
+      "harassment",
+      "hate",
+      "nudity",
+      "violence",
+      "scam",
+      "other",
+    ];
+    if (!allowedCategories.includes(normalizedCategory as AdminServerReportCategory)) {
+      return res.status(400).json({ error: "Invalid report category" });
+    }
+
+    const normalizedReason = String(reason ?? "Server violates community guidelines").trim();
+    if (!normalizedReason) {
+      return res.status(400).json({ error: "Report reason is required" });
+    }
+    if (normalizedReason.length > 300) {
+      return res.status(400).json({ error: "Report reason must be 300 characters or less" });
+    }
+
+    const normalizedDetails = String(details ?? "").trim();
+    if (normalizedDetails.length > 1000) {
+      return res.status(400).json({ error: "Report details must be 1000 characters or less" });
+    }
+
+    const existingPending = await AdminServerReport.findOne({
+      server: server._id,
+      reportedBy: userId,
+      reason: normalizedReason,
+      status: "pending",
+    }).select("_id");
+
+    if (existingPending?._id) {
+      return res.status(200).json({
+        reported: true,
+        duplicate: true,
+        reportId: String(existingPending._id),
+      });
+    }
+
+    const created = await AdminServerReport.create({
+      server: server._id,
+      reportedBy: userId,
+      reason: normalizedReason,
+      category: normalizedCategory as AdminServerReportCategory,
+      details: normalizedDetails,
+    });
+
+    emitAdminDataChanged(["reports", "dashboard"]);
+    return res.status(201).json({
+      reported: true,
+      reportId: String(created._id),
+      status: created.status,
     });
   } catch (error) {
     res.status(500);
