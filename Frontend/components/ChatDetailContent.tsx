@@ -163,10 +163,6 @@ export function ChatDetailContent({
 
   const title =
     target.kind === "channel" ? `#${target.channelName}` : target.name;
-  const subtitle =
-    target.kind === "channel"
-      ? `${target.serverName} · text channel`
-      : "";
 
   const openChannelInfo = useCallback(() => {
     if (target.kind !== "channel") return;
@@ -603,18 +599,21 @@ export function ChatDetailContent({
     closeMessageActions();
   };
 
-  const handleReactToMessage = async (messageId: string, emoji: string) => {
-    if (!messageId || !emoji.trim()) return;
-    try {
-      if (isChannel) {
-        await reactToChannelMessage.mutateAsync({ messageId, emoji });
-      } else {
-        await reactToDirectMessage.mutateAsync({ messageId, emoji });
+  const handleReactToMessage = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!messageId || !emoji.trim()) return;
+      try {
+        if (isChannel) {
+          await reactToChannelMessage.mutateAsync({ messageId, emoji });
+        } else {
+          await reactToDirectMessage.mutateAsync({ messageId, emoji });
+        }
+      } catch {
+        setReportStatusText("Could not update reaction.");
       }
-    } catch {
-      setReportStatusText("Could not update reaction.");
-    }
-  };
+    },
+    [isChannel, reactToChannelMessage, reactToDirectMessage]
+  );
 
   const reportReasonText: Record<ReportCategory, string> = {
     spam: "Spam or misleading content",
@@ -990,6 +989,7 @@ export function ChatDetailContent({
       </Swipeable>
     );
   }, [
+    formatSentLabel,
     getAvatarFallback,
     getAvatarUrl,
     getMemberFromMessage,
@@ -997,6 +997,9 @@ export function ChatDetailContent({
     highlightedMessageId,
     isMyMessage,
     myProfile?._id,
+    myProfile?.imageUrl,
+    myProfile?.name,
+    myProfile?.username,
     openMessageActions,
     openProfilePreview,
     parseReplyPayload,
@@ -1051,10 +1054,10 @@ export function ChatDetailContent({
         ) : null}
       </View>
 
-      <View className="flex-1 items-center justify-center px-4">
+      <View className="flex-1 min-h-0 px-4">
         <KeyboardAvoidingView
-          behavior={undefined}
-          className="flex-1 w-full"
+          behavior="padding"
+          style={{ flex: 1, width: "100%" }}
         >
             {isLoadingMessages ? (
               <View className="flex-1 items-center justify-center">

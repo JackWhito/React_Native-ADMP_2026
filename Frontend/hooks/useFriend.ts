@@ -1,9 +1,11 @@
 import { useApi } from "@/lib/axios";
+import { useSessionApiReady } from "@/contexts/SessionProfileContext";
 import type { FriendInvitePayload, FriendSearchResult } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const useFriendInviteLink = () => {
   const { apiWithAuth } = useApi();
+  const { isApiReady } = useSessionApiReady();
   return useQuery({
     queryKey: ["friend-invite-link"],
     queryFn: async () => {
@@ -13,11 +15,13 @@ export const useFriendInviteLink = () => {
       });
       return data;
     },
+    enabled: isApiReady,
   });
 };
 
 export const useSearchProfiles = (q: string) => {
   const { apiWithAuth } = useApi();
+  const { isApiReady } = useSessionApiReady();
   return useQuery({
     queryKey: ["friend-search", q],
     queryFn: async () => {
@@ -27,7 +31,7 @@ export const useSearchProfiles = (q: string) => {
       });
       return data;
     },
-    enabled: q.trim().length > 0,
+    enabled: q.trim().length > 0 && isApiReady,
   });
 };
 
@@ -69,6 +73,7 @@ export const useAddFriendByLink = () => {
 
 export const useSharedServers = (profileId: string | null | undefined) => {
   const { apiWithAuth } = useApi();
+  const { isApiReady } = useSessionApiReady();
   return useQuery({
     queryKey: ["shared-servers", profileId],
     queryFn: async () => {
@@ -81,6 +86,6 @@ export const useSharedServers = (profileId: string | null | undefined) => {
       });
       return data;
     },
-    enabled: !!profileId,
+    enabled: Boolean(profileId && isApiReady),
   });
 };

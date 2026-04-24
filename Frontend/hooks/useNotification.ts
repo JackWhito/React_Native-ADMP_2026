@@ -1,17 +1,13 @@
 import { useApi } from "@/lib/axios";
+import { useSessionApiReady } from "@/contexts/SessionProfileContext";
+import { useAppAuthed } from "@/hooks/useAppAuthed";
+import { openSocketWithLanUrls } from "@/lib/openSocketWithLanUrls";
+import { resolveAuthToken } from "@/lib/resolveAuthToken";
 import type { AppNotification } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/expo";
-import { useEffect, useMemo, useRef } from "react";
-import { io, type Socket } from "socket.io-client";
-
-const resolveSocketUrl = () => {
-  const rawBaseUrl =
-    process.env.EXPO_PUBLIC_API_URL ||
-    process.env.EXPO_PUBLIC_BACKEND_URL ||
-    "http://192.168.1.11:5000/api";
-  return rawBaseUrl.replace(/\/api\/?$/, "");
-};
+import { useEffect, useRef } from "react";
+import type { Socket } from "socket.io-client";
 
 const removeNotificationFromCache = (
   queryClient: ReturnType<typeof useQueryClient>,
@@ -24,25 +20,38 @@ const removeNotificationFromCache = (
 
 export const useNotifications = () => {
   const { apiWithAuth } = useApi();
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { getToken } = useAuth();
+  const { isAuthLoaded, isAuthed } = useAppAuthed();
+  const { isApiReady } = useSessionApiReady();
   const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
   const getTokenRef = useRef(getToken);
-  const socketUrl = useMemo(() => resolveSocketUrl(), []);
-  const canUseNotifications = isLoaded && isSignedIn;
+  const canUseNotifications = isAuthLoaded && isAuthed && isApiReady;
 
   useEffect(() => {
-    getTokenRef.current = getToken;
+    getTokenRef.current = () => resolveAuthToken(getToken);
   }, [getToken]);
 
   const query = useQuery({
     queryKey: ["notifications"],
     queryFn: async () => {
-      const { data } = await apiWithAuth<AppNotification[]>({
-        method: "GET",
-        url: "/notifications",
-      });
-      return data;
+      const all: AppNotification[] = [];
+      let cursor: string | undefined;
+      for (let i = 0; i < 50; i += 1) {
+        const { data } = await apiWithAuth<{
+          notifications: AppNotification[];
+          nextCursor: string | null;
+          hasMore: boolean;
+        }>({
+          method: "GET",
+          url: "/notifications",
+          params: { limit: 100, ...(cursor ? { cursor } : {}) },
+        });
+        all.push(...(data.notifications ?? []));
+        if (!data.hasMore || !data.nextCursor) break;
+        cursor = data.nextCursor;
+      }
+      return all;
     },
     enabled: canUseNotifications,
     staleTime: 30_000,
@@ -59,14 +68,14 @@ export const useNotifications = () => {
       return;
     }
     let cancelled = false;
+    let closeSocket: (() => void) | null = null;
     const connectSocket = async () => {
       const token = await getTokenRef.current();
       if (!token || cancelled) return;
 
-      const socket = io(socketUrl, {
-        transports: ["websocket"],
-        auth: { token },
-      });
+      closeSocket = openSocketWithLanUrls(
+        { transports: ["websocket"], auth: { token } },
+        (socket) => {
       socketRef.current = socket;
 
       socket.on("notification-created", (incoming: AppNotification) => {
@@ -81,10 +90,11 @@ export const useNotifications = () => {
         "notification-updated",
         (incoming: Partial<AppNotification> & { _id?: string }) => {
           if (!incoming?._id) return;
+          const id = String(incoming._id);
           queryClient.setQueryData<AppNotification[]>(["notifications"], (current = []) => {
             let changed = false;
             const next = current.map((n) => {
-              if (n._id !== incoming._id) return n;
+              if (String(n._id) !== id) return n;
               changed = true;
               return { ...n, ...incoming } as AppNotification;
             });
@@ -92,15 +102,22 @@ export const useNotifications = () => {
           });
         }
       );
+        }
+      );
+      if (cancelled) {
+        closeSocket();
+        closeSocket = null;
+        socketRef.current = null;
+      }
     };
 
-    connectSocket();
+    void connectSocket();
     return () => {
       cancelled = true;
-      socketRef.current?.disconnect();
+      closeSocket?.();
       socketRef.current = null;
     };
-  }, [canUseNotifications, queryClient, socketUrl]);
+  }, [canUseNotifications, queryClient]);
 
   return query;
 };
@@ -131,9 +148,10 @@ export const useMarkNotificationAsRead = () => {
       return data;
     },
     onSuccess: (_result, notificationId) => {
+      const id = String(notificationId);
       queryClient.setQueryData<AppNotification[]>(["notifications"], (current = []) =>
         current.map((n) =>
-          n._id === notificationId
+          String(n._id) === id
             ? { ...n, isRead: true, readAt: new Date().toISOString() }
             : n
         )

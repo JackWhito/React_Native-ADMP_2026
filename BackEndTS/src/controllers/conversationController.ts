@@ -2,6 +2,7 @@ import type { NextFunction, Response } from "express";
 import type { AuthRequest } from "../middleware/auth";
 import { Conversation } from "../models/Conversation";
 import mongoose from "mongoose";
+import { decodeSortCursor, encodeSortCursor, nextPageFilter, parseListLimit } from "../utils/cursorPagination";
 
 export async function getOrCreateConversation(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -42,34 +43,61 @@ export async function getOrCreateConversation(req: AuthRequest, res: Response, n
 
 export async function getConversations(req: AuthRequest, res: Response, next: NextFunction) {
   const userId = req.profileId;
-  try{
-    const conversations = await Conversation.find({
-      $or: [
-        {memberOne: userId},
-        {memberTwo: userId}
-      ]
-    }).populate("memberOne", "name username email imageUrl")
-    .populate("memberTwo", "name username email imageUrl")
-    .populate("lastMessage", "content member createdAt")
-    .sort({lastMessageAt:-1});
+  try {
+    const limit = parseListLimit((req.query as { limit?: string }).limit);
+    const rawCursor = typeof (req.query as { cursor?: string }).cursor === "string"
+      ? (req.query as { cursor: string }).cursor
+      : "";
+    const cur = rawCursor ? decodeSortCursor(rawCursor) : null;
 
-    const formatted = conversations.map(conversation => {
-      const memberOneDoc: any = conversation.memberOne as any;
-      const memberOneId =
-        memberOneDoc?._id ? memberOneDoc._id.toString() : String(memberOneDoc);
+    const membership = {
+      $or: [{ memberOne: userId }, { memberTwo: userId }],
+    };
+    const filter: Record<string, unknown> = cur
+      ? { $and: [membership, nextPageFilter("lastMessageAt", cur)] }
+      : membership;
 
-      const others = memberOneId === userId ? conversation.memberTwo : conversation.memberOne;
+    const rows = await Conversation.find(filter)
+      .populate("memberOne", "name username email imageUrl")
+      .populate("memberTwo", "name username email imageUrl")
+      .populate("lastMessage", "content member createdAt")
+      .sort({ lastMessageAt: -1, _id: -1 })
+      .limit(limit + 1)
+      .lean();
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page[page.length - 1] as
+      | { _id?: unknown; lastMessageAt?: Date }
+      | undefined;
+    const lastAt = last?.lastMessageAt instanceof Date ? last.lastMessageAt : new Date(0);
+    const nextCursor =
+      hasMore && last?._id != null
+        ? encodeSortCursor(lastAt, String(last._id))
+        : null;
+
+    const formatted = page.map((conversation) => {
+      const c = conversation as {
+        _id: unknown;
+        memberOne: unknown;
+        memberTwo: unknown;
+        lastMessage: unknown;
+        lastMessageAt: unknown;
+        createdAt: unknown;
+      };
+      const memberOneDoc: any = c.memberOne;
+      const memberOneId = memberOneDoc?._id ? memberOneDoc._id.toString() : String(memberOneDoc);
+      const others = memberOneId === userId ? c.memberTwo : c.memberOne;
       return {
-        _id: conversation._id,
+        _id: c._id,
         member: others,
-        lastMessage: conversation.lastMessage,
-        lastMessageAt: conversation.lastMessageAt,
-        createdAt: conversation.createdAt,
-      }
-    })
-    res.status(200).json(formatted)
-  } catch (error)
-  {
+        lastMessage: c.lastMessage,
+        lastMessageAt: c.lastMessageAt,
+        createdAt: c.createdAt,
+      };
+    });
+    return res.status(200).json({ conversations: formatted, nextCursor, hasMore });
+  } catch (error) {
     res.status(500);
     next(error);
   }

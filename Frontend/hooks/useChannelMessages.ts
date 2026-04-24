@@ -1,4 +1,7 @@
 import { useApi } from "@/lib/axios";
+import { useSessionApiReady } from "@/contexts/SessionProfileContext";
+import { openSocketWithLanUrls } from "@/lib/openSocketWithLanUrls";
+import { resolveAuthToken } from "@/lib/resolveAuthToken";
 import {
   InfiniteData,
   useInfiniteQuery,
@@ -7,7 +10,7 @@ import {
 } from "@tanstack/react-query";
 import { useAuth } from "@clerk/expo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { io, type Socket } from "socket.io-client";
+import type { Socket } from "socket.io-client";
 import type { ChannelMessage } from "@/types";
 
 const CHANNEL_MESSAGES_PAGE_SIZE = 10;
@@ -62,14 +65,6 @@ const normalizeMessagesPayload = (payload: MessageListPayload): ChannelMessagesP
         ? payload.hasMore
         : messages.length === CHANNEL_MESSAGES_PAGE_SIZE,
   };
-};
-
-const resolveSocketUrl = () => {
-  const rawBaseUrl =
-    process.env.EXPO_PUBLIC_API_URL ||
-    process.env.EXPO_PUBLIC_BACKEND_URL ||
-    "http://192.168.1.11:5000/api";
-  return rawBaseUrl.replace(/\/api\/?$/, "");
 };
 
 type TypingUser = {
@@ -177,6 +172,7 @@ const replaceOptimisticMessageInInfiniteData = (
 export const useChannelMessages = (channelId: string | null | undefined) => {
   const { apiWithAuth } = useApi();
   const { getToken } = useAuth();
+  const { isApiReady } = useSessionApiReady();
   const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
   const getTokenRef = useRef(getToken);
@@ -191,10 +187,8 @@ export const useChannelMessages = (channelId: string | null | undefined) => {
     [channelId]
   );
 
-  const socketUrl = useMemo(() => resolveSocketUrl(), []);
-
   useEffect(() => {
-    getTokenRef.current = getToken;
+    getTokenRef.current = () => resolveAuthToken(getToken);
   }, [getToken]);
 
   useEffect(() => {
@@ -218,7 +212,7 @@ export const useChannelMessages = (channelId: string | null | undefined) => {
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor ?? undefined : undefined),
-    enabled: !!channelId,
+    enabled: Boolean(channelId && isApiReady),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnMount: false,
@@ -235,17 +229,17 @@ export const useChannelMessages = (channelId: string | null | undefined) => {
   );
 
   useEffect(() => {
-    if (!channelId) return;
+    if (!channelId || !isApiReady) return;
     let cancelled = false;
+    let closeSocket: (() => void) | null = null;
 
     const connectSocket = async () => {
       const token = await getTokenRef.current();
       if (!token || cancelled) return;
 
-      const socket = io(socketUrl, {
-        transports: ["websocket"],
-        auth: { token },
-      });
+      closeSocket = openSocketWithLanUrls(
+        { transports: ["websocket"], auth: { token } },
+        (socket) => {
       socketRef.current = socket;
 
       socket.on("connect", () => {
@@ -314,9 +308,16 @@ export const useChannelMessages = (channelId: string | null | undefined) => {
           return current.filter((u) => u.userId !== typingUserId);
         });
       });
+        }
+      );
+      if (cancelled) {
+        closeSocket();
+        closeSocket = null;
+        socketRef.current = null;
+      }
     };
 
-    connectSocket();
+    void connectSocket();
 
     return () => {
       cancelled = true;
@@ -325,11 +326,11 @@ export const useChannelMessages = (channelId: string | null | undefined) => {
       const socket = socketRef.current;
       if (socket) {
         socket.emit("leave-channel", channelId);
-        socket.disconnect();
-        socketRef.current = null;
       }
+      closeSocket?.();
+      socketRef.current = null;
     };
-  }, [channelId, queryClient, socketUrl]);
+  }, [channelId, isApiReady, queryClient, queryKey]);
 
   const setTyping = useCallback(
     (isTyping: boolean) => {

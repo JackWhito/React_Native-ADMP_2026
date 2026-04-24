@@ -16,30 +16,37 @@ function generateInviteCode(length = 10) {
   return out;
 }
 
-export async function getServer(req: AuthRequest, res: Response, next: NextFunction) {
+export async function getServers(req: AuthRequest, res: Response, next: NextFunction) {
     const userId = req.profileId
     try {
-    const server = await Server.findOne({participants: userId})
-    if(!server) {
-        res.status(404).json({ message: 'Server not found' });
-        return;
-    }
-    res.status(200).json(server);
+    const servers = await Server.find({ participants: userId })
+      .select("_id name imageUrl inviteCode createdBy participants admins createdAt updatedAt")
+      .lean();
+    res.status(200).json(servers);
     } catch (error) {
         res.status(500);
         next(error);
     }
 }
 
-export async function getServers(req: AuthRequest, res: Response, next: NextFunction) {
-    const userId = req.profileId
-    try {
-    const servers = await Server.find({participants: userId})
-    res.status(200).json(servers);
-    } catch (error) {
-        res.status(500);
-        next(error);
+export async function getServerById(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  const serverId = (req.params as { serverId?: string }).serverId;
+  try {
+    if (!serverId || !mongoose.Types.ObjectId.isValid(serverId)) {
+      return res.status(400).json({ error: "Invalid server id" });
     }
+    const server = await Server.findOne({ _id: serverId, participants: userId })
+      .select("_id name imageUrl inviteCode createdBy participants admins createdAt updatedAt")
+      .lean();
+    if (!server) {
+      return res.status(404).json({ error: "Server not found" });
+    }
+    return res.status(200).json(server);
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
 }
 
 export async function createServer(req: AuthRequest, res: Response, next: NextFunction) {

@@ -13,6 +13,19 @@ import { DirectMessage } from "../models/DirectMessage";
 import { AdminUserReport, type AdminUserReportCategory } from "../models/AdminUserReport";
 import { usernameFromLinkOrCode } from "../utils/username";
 import { emitAdminDataChanged, getSocketServer } from "../utils/socket";
+import { invalidateAuthProfileCacheAfterSave } from "../utils/profileAuthCache";
+import { LocalEmailChangeOtp } from "../models/LocalEmailChangeOtp";
+import { sendOtpEmail } from "../utils/sendOtpEmail";
+import { hashAppPassword, isStrongAppPassword, verifyAppPassword } from "../utils/appPassword";
+import { signAppToken } from "../utils/appJwt";
+import { randomInt } from "node:crypto";
+
+const ACCOUNT_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ACCOUNT_OTP_TTL_MS = 15 * 60 * 1000;
+
+function generateAccountOtp6(): string {
+  return randomInt(0, 1_000_000).toString().padStart(6, "0");
+}
 
 async function createFriendConversation(userOne: string, userTwo: string) {
   return Conversation.findOneAndUpdate(
@@ -177,7 +190,9 @@ export async function addFriendByLink(req: AuthRequest, res: Response, next: Nex
 export async function getMyProfile(req: AuthRequest, res: Response, next: NextFunction) {
   const userId = req.profileId;
   try {
-    const me = await Profile.findById(userId).select("_id clerkId name username bio imageUrl email createdAt");
+    const me = await Profile.findById(userId).select(
+      "_id clerkId name username bio imageUrl email createdAt authProvider"
+    );
     if (!me) return res.status(404).json({ error: "Profile not found" });
     return res.status(200).json(me);
   } catch (error) {
@@ -330,6 +345,7 @@ export async function blockUserProfile(req: AuthRequest, res: Response, next: Ne
 
     me.blockedProfiles = [...(me.blockedProfiles ?? []), new mongoose.Types.ObjectId(profileId)];
     await me.save();
+    invalidateAuthProfileCacheAfterSave(me);
 
     await Notification.deleteMany({
       type: "friend_invite",
@@ -364,6 +380,33 @@ export async function updateMyProfile(req: AuthRequest, res: Response, next: Nex
     me.name = normalizedName;
     me.bio = normalizedBio;
     await me.save();
+    invalidateAuthProfileCacheAfterSave(me);
+
+    return res.status(200).json(me);
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+export async function updateMyAvatar(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  const rawImageUrl = (req.body as { imageUrl?: unknown } | undefined)?.imageUrl;
+  const imageUrl = typeof rawImageUrl === "string" ? rawImageUrl.trim() : "";
+  try {
+    if (imageUrl.length > 8_000_000) {
+      return res.status(400).json({ error: "Avatar payload is too large." });
+    }
+    if (imageUrl && !/^https?:\/\//i.test(imageUrl) && !/^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(imageUrl)) {
+      return res.status(400).json({ error: "Avatar must be an image URL or base64 data URL." });
+    }
+
+    const me = await Profile.findById(userId);
+    if (!me) return res.status(404).json({ error: "Profile not found" });
+
+    me.imageUrl = imageUrl;
+    await me.save();
+    invalidateAuthProfileCacheAfterSave(me);
 
     return res.status(200).json(me);
   } catch (error) {
@@ -394,6 +437,12 @@ export async function updateAccountSettings(req: AuthRequest, res: Response, nex
     const me = await Profile.findById(userId);
     if (!me) return res.status(404).json({ error: "Profile not found" });
 
+    if (me.authProvider === "email" && normalizedEmail !== me.email) {
+      return res.status(400).json({
+        error: "Use the email verification flow in account settings to change your sign-in address.",
+      });
+    }
+
     const usernameTaken = await Profile.findOne({
       _id: { $ne: me._id },
       username: normalizedUsername,
@@ -410,8 +459,144 @@ export async function updateAccountSettings(req: AuthRequest, res: Response, nex
     me.username = normalizedUsername;
     me.email = normalizedEmail;
     await me.save();
+    invalidateAuthProfileCacheAfterSave(me);
 
     return res.status(200).json(me);
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+/** POST /api/users/account/email-change/request */
+export async function requestAccountEmailChange(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  const { newEmail: raw } = (req.body ?? {}) as { newEmail?: string };
+  const newEmail = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  try {
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    if (!ACCOUNT_EMAIL_REGEX.test(newEmail)) {
+      return res.status(400).json({ error: "Invalid email address." });
+    }
+
+    const me = await Profile.findById(userId);
+    if (!me) return res.status(404).json({ error: "Profile not found" });
+    if (me.authProvider !== "email") {
+      return res.status(400).json({ error: "Email change requests apply only to email sign-in accounts." });
+    }
+    if (newEmail === me.email) {
+      return res.status(400).json({ error: "That is already your current email." });
+    }
+
+    const emailTaken = await Profile.findOne({ _id: { $ne: me._id }, email: newEmail }).select("_id");
+    if (emailTaken) {
+      return res.status(409).json({ error: "That email is already in use." });
+    }
+
+    await LocalEmailChangeOtp.deleteMany({ profile: me._id });
+    const otp = generateAccountOtp6();
+    const expiresAt = new Date(Date.now() + ACCOUNT_OTP_TTL_MS);
+    await LocalEmailChangeOtp.create({
+      profile: me._id,
+      newEmail,
+      otp,
+      expiresAt,
+    });
+    await sendOtpEmail(newEmail, otp, "app_email_change");
+
+    return res.status(200).json({ ok: true, message: "If that address is available, a verification code was sent." });
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+/** POST /api/users/account/email-change/confirm */
+export async function confirmAccountEmailChange(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  const { newEmail: raw, otp: rawOtp } = (req.body ?? {}) as { newEmail?: string; otp?: string };
+  const newEmail = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  const otp = typeof rawOtp === "string" ? rawOtp.trim() : "";
+  try {
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    if (!ACCOUNT_EMAIL_REGEX.test(newEmail) || !otp) {
+      return res.status(400).json({ error: "New email and verification code are required." });
+    }
+
+    const me = await Profile.findById(userId);
+    if (!me) return res.status(404).json({ error: "Profile not found" });
+    if (me.authProvider !== "email") {
+      return res.status(400).json({ error: "This action applies only to email sign-in accounts." });
+    }
+
+    const row = await LocalEmailChangeOtp.findOne({
+      profile: me._id,
+      newEmail,
+      otp,
+    });
+    if (!row || row.expiresAt.getTime() < Date.now()) {
+      return res.status(400).json({ error: "Invalid or expired code." });
+    }
+
+    const emailTaken = await Profile.findOne({ _id: { $ne: me._id }, email: newEmail }).select("_id");
+    if (emailTaken) {
+      await LocalEmailChangeOtp.deleteMany({ profile: me._id });
+      return res.status(409).json({ error: "That email is already in use." });
+    }
+
+    me.email = newEmail;
+    me.sessionVersion = (me.sessionVersion ?? 1) + 1;
+    await me.save();
+    await LocalEmailChangeOtp.deleteMany({ profile: me._id });
+    invalidateAuthProfileCacheAfterSave(me);
+
+    const accessToken = await signAppToken(String(me._id), me.sessionVersion);
+    return res.status(200).json({ ...me.toObject(), accessToken });
+  } catch (error) {
+    res.status(500);
+    next(error);
+  }
+}
+
+/** PATCH /api/users/account/local-password */
+export async function updateLocalAccountPassword(req: AuthRequest, res: Response, next: NextFunction) {
+  const userId = req.profileId;
+  const { currentPassword, newPassword } = (req.body ?? {}) as {
+    currentPassword?: string;
+    newPassword?: string;
+  };
+  const current = typeof currentPassword === "string" ? currentPassword : "";
+  const nextPw = typeof newPassword === "string" ? newPassword : "";
+  try {
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    if (!current || !nextPw) {
+      return res.status(400).json({ error: "Current and new password are required." });
+    }
+    if (!isStrongAppPassword(nextPw)) {
+      return res.status(400).json({
+        error:
+          "New password must be at least 8 characters and include upper, lower, number, and symbol.",
+      });
+    }
+
+    const me = await Profile.findById(userId).select("+passwordHash");
+    if (!me) return res.status(404).json({ error: "Profile not found" });
+    if (me.authProvider !== "email" || !me.passwordHash) {
+      return res.status(400).json({ error: "Password change is only for email sign-in accounts." });
+    }
+
+    const ok = await verifyAppPassword(current, me.passwordHash);
+    if (!ok) {
+      return res.status(401).json({ error: "Current password is incorrect." });
+    }
+
+    me.passwordHash = await hashAppPassword(nextPw);
+    me.sessionVersion = (me.sessionVersion ?? 1) + 1;
+    await me.save();
+    invalidateAuthProfileCacheAfterSave(me);
+
+    const accessToken = await signAppToken(String(me._id), me.sessionVersion);
+    return res.status(200).json({ success: true, accessToken });
   } catch (error) {
     res.status(500);
     next(error);
@@ -426,10 +611,13 @@ export async function deleteMyAccount(req: AuthRequest, res: Response, next: Nex
 
     const createdServers = await Server.find({ createdBy: me._id }).select("_id").lean();
     const createdServerIds = createdServers.map((s) => s._id);
+    const createdChannelIds = createdServerIds.length
+      ? await Channel.find({ server: { $in: createdServerIds } }).distinct("_id")
+      : [];
 
     if (createdServerIds.length) {
       await Promise.all([
-        Message.deleteMany({ channel: { $in: await Channel.find({ server: { $in: createdServerIds } }).distinct("_id") } }),
+        Message.deleteMany({ channel: { $in: createdChannelIds } }),
         Channel.deleteMany({ server: { $in: createdServerIds } }),
         ChannelCategory.deleteMany({ server: { $in: createdServerIds } }),
         Notification.deleteMany({ server: { $in: createdServerIds } }),
@@ -458,6 +646,8 @@ export async function deleteMyAccount(req: AuthRequest, res: Response, next: Nex
       Channel.updateMany({ profile: me._id }, { $pull: { profile: me._id } }),
     ]);
 
+    await LocalEmailChangeOtp.deleteMany({ profile: me._id });
+    invalidateAuthProfileCacheAfterSave(me);
     await Profile.deleteOne({ _id: me._id });
 
     if (me.clerkId) {

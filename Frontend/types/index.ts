@@ -105,10 +105,10 @@ export interface ChannelMessage {
   member?: ChannelMessageMember | string;
   channel: string;
   deleted?: boolean;
-  reactions?: Array<{
+  reactions?: {
     emoji: string;
     users: string[];
-  }>;
+  }[];
   createdAt: string;
   updatedAt: string;
 }
@@ -120,10 +120,10 @@ export interface DirectMessage {
   member?: ChannelMessageMember | string;
   conversation: string;
   deleted?: boolean;
-  reactions?: Array<{
+  reactions?: {
     emoji: string;
     users: string[];
-  }>;
+  }[];
   createdAt: string;
   updatedAt: string;
 }

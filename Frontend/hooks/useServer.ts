@@ -1,6 +1,7 @@
 import { useApi } from "@/lib/axios";
+import { useSessionApiReady } from "@/contexts/SessionProfileContext";
+import { useAppAuthed } from "@/hooks/useAppAuthed";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@clerk/expo";
 import type {
   Server,
   ServerCategory,
@@ -13,15 +14,16 @@ import type {
 
 export const useServers = (options?: { enabled?: boolean }) => {
     const {apiWithAuth} = useApi()
-    const { isLoaded, isSignedIn } = useAuth();
+    const { isAuthLoaded, isAuthed } = useAppAuthed();
+    const { isApiReady } = useSessionApiReady();
 
-    return useQuery({
+    return useQuery<Server[]>({
         queryKey:["servers"],
         queryFn: async () => {
-            const {data} = await apiWithAuth({method:"GET", url:"/servers"})
-            return data;
+            const { data } = await apiWithAuth<Server[]>({ method: "GET", url: "/servers" });
+            return Array.isArray(data) ? data : [];
         },
-        enabled: Boolean(isLoaded && isSignedIn && (options?.enabled ?? true)),
+        enabled: Boolean(isAuthLoaded && isAuthed && isApiReady && (options?.enabled ?? true)),
         staleTime: 30_000,
         gcTime: 10 * 60_000,
         refetchOnWindowFocus: false,
@@ -151,6 +153,7 @@ export const useUpdateServer = () => {
 
 export const useServerChannels = (serverId: string | null | undefined) => {
   const { apiWithAuth } = useApi();
+  const { isApiReady } = useSessionApiReady();
 
   return useQuery({
     queryKey: ["server-channels", serverId],
@@ -161,12 +164,13 @@ export const useServerChannels = (serverId: string | null | undefined) => {
       });
       return data;
     },
-    enabled: !!serverId,
+    enabled: Boolean(serverId && isApiReady),
   });
 };
 
 export const useServerChannelList = (serverId: string | null | undefined) => {
   const { apiWithAuth } = useApi();
+  const { isApiReady } = useSessionApiReady();
 
   return useQuery({
     queryKey: ["server-channel-list", serverId],
@@ -177,7 +181,7 @@ export const useServerChannelList = (serverId: string | null | undefined) => {
       });
       return data;
     },
-    enabled: !!serverId,
+    enabled: Boolean(serverId && isApiReady),
     retry: (failureCount, error: any) => {
       const status = error?.response?.status;
       if (status === 404) return false;
@@ -245,6 +249,7 @@ export const useDeleteServerCategory = () => {
 
 export const useServerInvite = (serverId: string | null | undefined) => {
   const { apiWithAuth } = useApi();
+  const { isApiReady } = useSessionApiReady();
 
   return useQuery({
     queryKey: ["server-invite", serverId],
@@ -255,7 +260,7 @@ export const useServerInvite = (serverId: string | null | undefined) => {
       });
       return data;
     },
-    enabled: !!serverId,
+    enabled: Boolean(serverId && isApiReady),
     retry: (failureCount, error: any) => {
       const status = error?.response?.status;
       if (status === 404) return false;
@@ -266,6 +271,7 @@ export const useServerInvite = (serverId: string | null | undefined) => {
 
 export const useServerMembers = (serverId: string | null | undefined) => {
   const { apiWithAuth } = useApi();
+  const { isApiReady } = useSessionApiReady();
 
   return useQuery({
     queryKey: ["server-members", serverId],
@@ -276,7 +282,7 @@ export const useServerMembers = (serverId: string | null | undefined) => {
       });
       return data;
     },
-    enabled: !!serverId,
+    enabled: Boolean(serverId && isApiReady),
     retry: (failureCount, error: any) => {
       const status = error?.response?.status;
       if (status === 404) return false;

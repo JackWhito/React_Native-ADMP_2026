@@ -4,6 +4,7 @@ import { Profile } from "../models/Profile";
 import { clerkClient, getAuth } from "@clerk/express";
 import { generateUniqueUsername } from "../utils/username";
 import { emitAdminDataChanged } from "../utils/socket";
+import { invalidateAuthProfileCacheForClerkId } from "../utils/profileAuthCache";
 
 
 export async function getMe(req: AuthRequest, res: Response, next: NextFunction) {
@@ -74,6 +75,7 @@ export async function  authCallback(req: AuthRequest, res: Response, next: NextF
             }
             if (shouldSave) {
                 await profile.save();
+                invalidateAuthProfileCacheForClerkId(clerkId);
             }
         }
 

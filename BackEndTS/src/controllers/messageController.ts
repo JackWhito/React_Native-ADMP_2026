@@ -26,7 +26,7 @@ function toggleReactionInList(
         return next;
     }
 
-    const entry = next[reactionIndex];
+    const entry = next[reactionIndex]!;
     const userIds = (entry.users ?? []).map((u) => String(u));
     const hasReacted = userIds.includes(userId);
     if (hasReacted) {
@@ -34,13 +34,13 @@ function toggleReactionInList(
         if (!remainingUsers.length) {
             next.splice(reactionIndex, 1);
         } else {
-            next[reactionIndex] = { ...entry, users: remainingUsers as any };
+            next[reactionIndex] = { emoji: entry.emoji, users: remainingUsers as any };
         }
         return next;
     }
 
     next[reactionIndex] = {
-        ...entry,
+        emoji: entry.emoji,
         users: [...(entry.users ?? []), new mongoose.Types.ObjectId(userId)] as any,
     };
     return next;
@@ -360,8 +360,15 @@ export async function createChannelMessage(req: AuthRequest, res: Response, next
             return res.status(400).json({ error: "Message content or image is required" });
         }
 
-        const channel = await ensureChannelMembership(channelId, userId);
-        if (!channel) {
+        const channelRow = await Channel.findOne({ _id: channelId, profile: userId })
+            .select("server")
+            .populate({ path: "server", select: "participants" })
+            .lean() as
+            | {
+                server?: { _id?: unknown; participants?: Array<unknown> } | null;
+            }
+            | null;
+        if (!channelRow) {
             return res.status(404).json({ error: "Channel not found" });
         }
         if (req.shadowBanned) {
@@ -377,8 +384,9 @@ export async function createChannelMessage(req: AuthRequest, res: Response, next
         });
         await created.save();
         await created.populate("member", "clerkId name username imageUrl");
-        const channelServer = await Channel.findById(channelId).select("server");
-        if (channelServer?.server) {
+        const serverDoc = channelRow.server;
+        if (serverDoc?._id) {
+            const serverId = String(serverDoc._id);
             const senderProfile = await Profile.findById(userId)
                 .select("_id name username imageUrl")
                 .lean();
@@ -391,14 +399,8 @@ export async function createChannelMessage(req: AuthRequest, res: Response, next
             );
             let mentionRecipientIds: string[] = [];
             if (mentionUsernames.length) {
-                const serverWithParticipants = await Channel.findById(channelId)
-                    .select("server")
-                    .populate({
-                        path: "server",
-                        select: "participants",
-                    });
-                const participantIds = Array.isArray((serverWithParticipants as any)?.server?.participants)
-                    ? (serverWithParticipants as any).server.participants.map((p: any) => String(p))
+                const participantIds = Array.isArray(serverDoc?.participants)
+                    ? (serverDoc.participants as any[]).map((p) => String(p))
                     : [];
                 if (participantIds.length) {
                     const mentionedProfiles = await Profile.find({
@@ -418,7 +420,7 @@ export async function createChannelMessage(req: AuthRequest, res: Response, next
             }
             const createdNotifications = mentionRecipientIds.length
                 ? await createServerMessageNotifications({
-                    serverId: String(channelServer.server),
+                    serverId,
                     senderId: String(userId),
                     channelId,
                     messageContent: normalizedContent || normalizedFileUrl,
@@ -434,7 +436,7 @@ export async function createChannelMessage(req: AuthRequest, res: Response, next
                         : undefined,
                 })
                 : await createServerMessageNotifications({
-                    serverId: String(channelServer.server),
+                    serverId,
                     senderId: String(userId),
                     channelId,
                     messageContent: normalizedContent || normalizedFileUrl,

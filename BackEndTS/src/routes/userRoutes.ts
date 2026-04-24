@@ -4,13 +4,17 @@ import {
   addFriendByLink,
   addFriendByUsername,
   blockUserProfile,
+  confirmAccountEmailChange,
   deleteMyAccount,
   getFriendInviteLink,
   getMyProfile,
+  requestAccountEmailChange,
+  updateLocalAccountPassword,
   reportUserProfile,
   getSharedServersWithProfile,
   searchProfilesByName,
   updateAccountSettings,
+  updateMyAvatar,
   updateMyProfile,
 } from "../controllers/userController";
 
@@ -19,6 +23,10 @@ const router = Router();
 router.get("/search", protectRoute, searchProfilesByName);
 router.get("/me", protectRoute, getMyProfile);
 router.patch("/me", protectRoute, updateMyProfile);
+router.patch("/me/avatar", protectRoute, updateMyAvatar);
+router.post("/account/email-change/request", protectRoute, requestAccountEmailChange);
+router.post("/account/email-change/confirm", protectRoute, confirmAccountEmailChange);
+router.patch("/account/local-password", protectRoute, updateLocalAccountPassword);
 router.patch("/account", protectRoute, updateAccountSettings);
 router.delete("/account", protectRoute, deleteMyAccount);
 router.get("/friend-invite", protectRoute, getFriendInviteLink);

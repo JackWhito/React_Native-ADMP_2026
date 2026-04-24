@@ -11,6 +11,7 @@ import { Server } from '../models/Server';
 import { createServerMessageNotifications } from '../controllers/notificationController';
 import mongoose from 'mongoose';
 import { verifyAdminToken } from './adminJwt';
+import { verifyAppToken } from './appJwt';
 
 interface SocketWithProfile extends Socket {
     profileId: string;
@@ -77,6 +78,36 @@ export const initializeSocket = (server: HttpServer) => {
                 (socket as SocketWithProfile).isAdminClient = true;
                 return next();
             }
+
+            try {
+                const appPayload = await verifyAppToken(String(token));
+                const profileId = String(appPayload.sub ?? "");
+                if (profileId) {
+                    const user = await Profile.findById(profileId).select(
+                        "moderationStatus suspendedUntil sessionVersion authProvider"
+                    );
+                    if (user && String(user.authProvider ?? "clerk") === "email") {
+                        const v = typeof appPayload.v === "number" ? appPayload.v : null;
+                        if (v !== null && v !== (user.sessionVersion ?? 1)) {
+                            return next(new Error('Session expired'));
+                        }
+                        if (user.moderationStatus === 'banned') return next(new Error('Banned'));
+                        if (
+                            user.moderationStatus === 'suspended' &&
+                            user.suspendedUntil instanceof Date &&
+                            user.suspendedUntil.getTime() > Date.now()
+                        ) {
+                            return next(new Error('Suspended'));
+                        }
+                        (socket as SocketWithProfile).profileId = profileId;
+                        (socket as SocketWithProfile).shadowBanned = user.moderationStatus === 'shadow_banned';
+                        return next();
+                    }
+                }
+            } catch {
+                /* not an app JWT — try Clerk */
+            }
+
             const session = await verifyToken(token, {secretKey: process.env.CLERK_SECRET_KEY});
             const clerkId = session.sub;
             const user = await Profile.findOne({clerkId});

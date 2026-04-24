@@ -7,6 +7,7 @@ import { Server } from "../models/Server";
 import { Channel } from "../models/Channel";
 import { getSocketServer } from "../utils/socket";
 import { Conversation } from "../models/Conversation";
+import { decodeSortCursor, encodeSortCursor, nextPageFilter, parseListLimit } from "../utils/cursorPagination";
 
 async function createFriendConversation(userOne: string, userTwo: string) {
   return Conversation.findOneAndUpdate(
@@ -90,31 +91,88 @@ export async function createServerMessageNotifications(input: {
   const message = input.messageContent?.trim() || `${server.name} has a new message`;
   const now = new Date();
 
+  const findFilter: Record<string, unknown> = {
+    type,
+    server: server._id,
+    recipient: { $in: recipientIds.map((id) => new mongoose.Types.ObjectId(String(id))) },
+  };
+  if (channel?._id) {
+    findFilter.channel = channel._id;
+  }
+  const existingRows = await Notification.find(findFilter).lean();
+  const byRecipient = new Map(
+    existingRows.map((d) => [String(d.recipient), d] as [string, (typeof existingRows)[0]])
+  );
+
+  const bulkOps: Parameters<typeof Notification.bulkWrite>[0] = [];
+  const insertDocs: Array<{
+    type: "server_message" | "mention_message";
+    status: "accepted";
+    sender: mongoose.Types.ObjectId;
+    recipient: mongoose.Types.ObjectId;
+    server: mongoose.Types.ObjectId;
+    channel?: mongoose.Types.ObjectId;
+    message: string;
+    isRead: boolean;
+    readAt: null;
+  }> = [];
+
   for (const recipientId of recipientIds) {
-    const existing = await Notification.findOne({
-      type,
-      recipient: recipientId,
-      server: server._id,
-      ...(channel?._id ? { channel: channel._id } : {}),
-    });
-
+    const existing = byRecipient.get(String(recipientId));
     if (existing && type === "server_message") {
-      existing.sender = new mongoose.Types.ObjectId(String(input.senderId));
-      existing.status = "accepted";
-      existing.message = message;
-      existing.isRead = false;
-      existing.readAt = null;
-      await existing.save();
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: existing._id },
+          update: {
+            $set: {
+              sender: new mongoose.Types.ObjectId(String(input.senderId)),
+              status: "accepted",
+              message,
+              isRead: false,
+              readAt: null,
+              updatedAt: now,
+            },
+          },
+        },
+      });
+    } else {
+      insertDocs.push({
+        type,
+        status: "accepted",
+        sender: new mongoose.Types.ObjectId(String(input.senderId)),
+        recipient: new mongoose.Types.ObjectId(String(recipientId)),
+        server: server._id as mongoose.Types.ObjectId,
+        channel: channel?._id,
+        message,
+        isRead: false,
+        readAt: null,
+      });
+    }
+  }
 
+  if (bulkOps.length) {
+    await Notification.bulkWrite(bulkOps, { ordered: false });
+  }
+  const inserted = insertDocs.length
+    ? await Notification.insertMany(insertDocs, { ordered: true })
+    : [];
+  const insertedByRecipient = new Map(
+    inserted.map((d) => [String(d.recipient), d] as [string, (typeof inserted)[0]])
+  );
+
+  for (const recipientId of recipientIds) {
+    const key = String(recipientId);
+    const existing = byRecipient.get(key);
+    if (type === "server_message" && existing) {
       payloads.push({
         _id: String(existing._id),
         type,
         status: "accepted",
         isRead: false,
         readAt: null,
-        message: existing.message,
-        createdAt: existing.createdAt,
-        updatedAt: existing.updatedAt,
+        message,
+        createdAt: existing.createdAt as Date,
+        updatedAt: now,
         sender: input.senderPreview
           ? {
               _id: input.senderPreview._id,
@@ -134,55 +192,44 @@ export async function createServerMessageNotifications(input: {
               name: String((channel as any).name ?? ""),
             }
           : undefined,
-        recipient: String(recipientId),
+        recipient: key,
         event: "updated",
       });
-      continue;
+    } else {
+      const created = insertedByRecipient.get(key);
+      if (!created) continue;
+      payloads.push({
+        _id: String(created._id),
+        type,
+        status: "accepted",
+        isRead: false,
+        readAt: null,
+        message: created.message,
+        createdAt: created.createdAt,
+        updatedAt: created.updatedAt,
+        sender: input.senderPreview
+          ? {
+              _id: input.senderPreview._id,
+              name: input.senderPreview.name,
+              username: input.senderPreview.username ?? "",
+              imageUrl: input.senderPreview.imageUrl ?? "",
+            }
+          : undefined,
+        server: {
+          _id: String(server._id),
+          name: String((server as any).name ?? ""),
+          imageUrl: String((server as any).imageUrl ?? ""),
+        },
+        channel: channel
+          ? {
+              _id: String(channel._id),
+              name: String((channel as any).name ?? ""),
+            }
+          : undefined,
+        recipient: key,
+        event: "created",
+      });
     }
-
-    const created = await Notification.create({
-      type,
-      status: "accepted",
-      sender: input.senderId,
-      recipient: recipientId,
-      server: server._id,
-      channel: channel?._id,
-      message,
-      isRead: false,
-      readAt: null,
-    });
-
-    payloads.push({
-      _id: String(created._id),
-      type,
-      status: "accepted",
-      isRead: false,
-      readAt: null,
-      message: created.message,
-      createdAt: created.createdAt,
-      updatedAt: created.updatedAt,
-      sender: input.senderPreview
-        ? {
-            _id: input.senderPreview._id,
-            name: input.senderPreview.name,
-            username: input.senderPreview.username ?? "",
-            imageUrl: input.senderPreview.imageUrl ?? "",
-          }
-        : undefined,
-      server: {
-        _id: String(server._id),
-        name: String((server as any).name ?? ""),
-        imageUrl: String((server as any).imageUrl ?? ""),
-      },
-      channel: channel
-        ? {
-            _id: String(channel._id),
-            name: String((channel as any).name ?? ""),
-          }
-        : undefined,
-      recipient: String(recipientId),
-      event: "created",
-    });
   }
 
   return payloads;
@@ -191,13 +238,30 @@ export async function createServerMessageNotifications(input: {
 export async function getMyNotifications(req: AuthRequest, res: Response, next: NextFunction) {
   const userId = req.profileId;
   try {
-    const rows = await Notification.find({ recipient: userId })
+    const limit = parseListLimit((req.query as { limit?: string }).limit);
+    const rawCursor = typeof (req.query as { cursor?: string }).cursor === "string"
+      ? (req.query as { cursor: string }).cursor
+      : "";
+    const cur = rawCursor ? decodeSortCursor(rawCursor) : null;
+    const base = { recipient: userId };
+    const filter: Record<string, unknown> = cur
+      ? { $and: [base, nextPageFilter("createdAt", cur)] }
+      : base;
+
+    const rows = await Notification.find(filter)
       .populate("sender", "name username imageUrl")
       .populate("server", "name imageUrl")
       .populate("channel", "name")
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit + 1)
       .lean();
-    return res.status(200).json(rows);
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page[page.length - 1] as { _id?: unknown; createdAt?: Date } | undefined;
+    const lastAt = last?.createdAt instanceof Date ? last.createdAt : new Date(0);
+    const nextCursor =
+      hasMore && last?._id != null ? encodeSortCursor(lastAt, String(last._id)) : null;
+    return res.status(200).json({ notifications: page, nextCursor, hasMore });
   } catch (error) {
     res.status(500);
     next(error);

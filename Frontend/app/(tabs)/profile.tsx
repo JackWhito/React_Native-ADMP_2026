@@ -1,4 +1,4 @@
-import { View, Text, Image, TouchableOpacity, Modal, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, Image, TouchableOpacity, Modal, Pressable, ActivityIndicator, Alert } from "react-native";
 import React, { useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,7 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { remoteImageSource } from "@/lib/utils";
 import * as ImagePicker from "expo-image-picker";
 import { useChat } from "@/hooks/useChat";
-import { useMyProfile } from "@/hooks/useProfile";
+import { useMyProfile, useUpdateMyAvatar } from "@/hooks/useProfile";
 import { useAuthCallback } from "@/hooks/useAuth";
 import type { Chat } from "@/types";
 
@@ -17,6 +17,7 @@ export default function Profile() {
   const { user, isLoaded } = useUser();
   const { data: conversations } = useChat();
   const { data: myProfile } = useMyProfile();
+  const updateMyAvatar = useUpdateMyAvatar();
   const syncAuth = useAuthCallback();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -31,8 +32,10 @@ export default function Profile() {
     user?.primaryEmailAddress?.emailAddress ||
     (isLoaded ? "User" : "…");
 
-  const avatarSrc = remoteImageSource(user?.imageUrl);
-  const canRemoveAvatar = useMemo(() => Boolean(user?.imageUrl?.trim()), [user?.imageUrl]);
+  const resolvedAvatarUrl = (myProfile?.imageUrl?.trim() || user?.imageUrl?.trim() || "").trim();
+  const isLocalEmailAccount = myProfile?.authProvider === "email";
+  const avatarSrc = remoteImageSource(resolvedAvatarUrl);
+  const canRemoveAvatar = useMemo(() => Boolean(resolvedAvatarUrl), [resolvedAvatarUrl]);
   const joinedSinceLabel = useMemo(() => {
     if (!user?.createdAt) return "Unknown";
     const date = new Date(user.createdAt);
@@ -54,15 +57,22 @@ export default function Profile() {
   };
 
   const refreshAvatarState = async () => {
-    await syncAuth.mutateAsync();
+    if (user?.id) {
+      try {
+        await syncAuth.mutateAsync();
+      } catch {
+        // Local email auth has no Clerk callback to sync.
+      }
+    }
     await queryClient.invalidateQueries({ queryKey: ["my-profile"] });
     await queryClient.invalidateQueries({ queryKey: ["conversations"] });
 
     const latestImageUrl = String((user as any)?.imageUrl ?? "").trim();
+    const myId = String(myProfile?._id ?? "").trim();
     queryClient.setQueryData<Chat[]>(["conversations"], (current) => {
       if (!Array.isArray(current) || !current.length) return current;
       return current.map((item) => {
-        const isMe = String(item.member?.clerkId ?? "") === String(user?.id ?? "");
+        const isMe = Boolean(myId) && String(item.member?._id ?? "") === myId;
         if (!isMe) return item;
         return {
           ...item,
@@ -75,8 +85,12 @@ export default function Profile() {
     });
   };
 
+  const pushAvatarToBackend = async (imageUrl: string) => {
+    await updateMyAvatar.mutateAsync({ imageUrl: imageUrl.trim() });
+  };
+
   const handlePickAvatar = async () => {
-    if (!user || avatarPending) return;
+    if (avatarPending) return;
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) return;
@@ -84,38 +98,67 @@ export default function Profile() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsEditing: true,
-        quality: 0.8,
+        aspect: [1, 1],
+        quality: isLocalEmailAccount ? 0.35 : 0.8,
+        base64: isLocalEmailAccount,
       });
       if (result.canceled) return;
 
       const asset = result.assets?.[0];
       if (!asset?.uri) return;
 
-      const setProfileImage = (user as any)?.setProfileImage;
-      if (typeof setProfileImage !== "function") return;
-
       setAvatarPending(true);
-      await setProfileImage.call(user, {
-        file: {
-          uri: asset.uri,
-          name: asset.fileName || `avatar-${Date.now()}.jpg`,
-          type: asset.mimeType || "image/jpeg",
-        },
-      });
+      const setProfileImage = (user as any)?.setProfileImage;
+      if (user && typeof setProfileImage === "function") {
+        await setProfileImage.call(user, {
+          file: {
+            uri: asset.uri,
+            name: asset.fileName || `avatar-${Date.now()}.jpg`,
+            type: asset.mimeType || "image/jpeg",
+          },
+        });
+        const reload = (user as any)?.reload;
+        if (typeof reload === "function") {
+          await reload.call(user);
+        }
+        await syncAuth.mutateAsync();
+        const clerkImageUrl = String((user as any)?.imageUrl ?? "").trim();
+        await pushAvatarToBackend(clerkImageUrl);
+      } else {
+        if (!asset?.base64) {
+          Alert.alert("Avatar update", "Could not read image data. Please try another image.");
+          return;
+        }
+        if (asset.base64.length > 2_000_000) {
+          Alert.alert(
+            "Image too large",
+            "Please pick a smaller image. For best results, use a square image under 2MB."
+          );
+          return;
+        }
+        const mime = asset.mimeType || "image/jpeg";
+        await pushAvatarToBackend(`data:${mime};base64,${asset.base64}`);
+      }
       await refreshAvatarState();
       setAvatarModalOpen(false);
+    } catch (error: any) {
+      const apiError =
+        error?.response?.data?.error || error?.message || "Could not update avatar. Please try again.";
+      Alert.alert("Avatar update failed", String(apiError));
     } finally {
       setAvatarPending(false);
     }
   };
 
   const handleRemoveAvatar = async () => {
-    if (!user || avatarPending) return;
-    const deleteProfileImage = (user as any)?.deleteProfileImage;
-    if (typeof deleteProfileImage !== "function") return;
+    if (avatarPending) return;
     try {
       setAvatarPending(true);
-      await deleteProfileImage.call(user);
+      const deleteProfileImage = (user as any)?.deleteProfileImage;
+      if (user && typeof deleteProfileImage === "function") {
+        await deleteProfileImage.call(user);
+      }
+      await pushAvatarToBackend("");
       await refreshAvatarState();
       setAvatarModalOpen(false);
     } finally {
@@ -169,9 +212,9 @@ export default function Profile() {
       {/* ---------- ACCOUNT INFO ---------- */}
       <View className="flex-col">
         <Text className="text-white pl-5 pt-3 text-[25px]">{displayName}</Text>
-        {user?.primaryEmailAddress?.emailAddress ? (
+        {(myProfile?.email || user?.primaryEmailAddress?.emailAddress) ? (
           <Text className="text-zinc-500 pl-5 pt-1 text-sm">
-            {user.primaryEmailAddress.emailAddress}
+            {myProfile?.email || user?.primaryEmailAddress?.emailAddress}
           </Text>
         ) : null}
       </View>

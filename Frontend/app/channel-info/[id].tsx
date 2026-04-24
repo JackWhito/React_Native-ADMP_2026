@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useAuth } from "@clerk/expo";
+import { useAppAuthed } from "@/hooks/useAppAuthed";
 import { useApi } from "@/lib/axios";
 import { useServerMembers } from "@/hooks/useServer";
 import type { ChannelMessage } from "@/types";
@@ -20,7 +20,7 @@ export default function ChannelInfoScreen() {
   const router = useRouter();
   const isFocused = useIsFocused();
   const { apiWithAuth } = useApi();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isAuthLoaded, isAuthed } = useAppAuthed();
   const params = useLocalSearchParams<{
     id?: string | string[];
     channelName?: string | string[];
@@ -38,6 +38,7 @@ export default function ChannelInfoScreen() {
   const [mediaAutoPrefetchCount, setMediaAutoPrefetchCount] = useState(0);
 
   const { data: membersData } = useServerMembers(serverId || null);
+  const members = useMemo(() => membersData?.members ?? [], [membersData?.members]);
   const pageSize = 30;
   const messagesQuery = useInfiniteQuery({
     queryKey: ["channel-info-messages", channelId],
@@ -70,7 +71,7 @@ export default function ChannelInfoScreen() {
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor ?? undefined : undefined),
-    enabled: Boolean(channelId && isLoaded && isSignedIn),
+    enabled: Boolean(channelId && isAuthLoaded && isAuthed),
     refetchOnWindowFocus: false,
     staleTime: 45_000,
   });
@@ -127,10 +128,6 @@ export default function ChannelInfoScreen() {
     return (messages ?? []).filter((msg) => !msg.deleted && /^📌/u.test(String(msg.content ?? "").trim()));
   }, [messages]);
 
-  const members = membersData?.members ?? [];
-
-  if (!channelId || !serverId) return null;
-
   const listData = useMemo<ChannelInfoListItem[]>(() => {
     if (activeTab === "members") {
       return members.map((member) => ({ key: member._id, type: "member", member }));
@@ -152,6 +149,10 @@ export default function ChannelInfoScreen() {
     if (activeTab === "media") return `${mediaMessages.length} media items`;
     return `${pinnedMessages.length} pinned messages`;
   }, [activeTab, members.length, mediaMessages.length, pinnedMessages.length]);
+
+  if (!channelId || !serverId) {
+    return null;
+  }
 
   const renderListItem = ({ item }: { item: ChannelInfoListItem }) => {
     if (item.type === "member") {

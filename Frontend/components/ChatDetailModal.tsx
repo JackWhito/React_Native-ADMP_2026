@@ -3,8 +3,6 @@ import {
   Modal,
   View,
   Pressable,
-  KeyboardAvoidingView,
-  Platform,
   useWindowDimensions,
   BackHandler,
 } from "react-native";
@@ -105,41 +103,36 @@ export default function ChatDetailModal({
   return (
     <Modal visible transparent animationType="none" onRequestClose={closeAnimated}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          className="flex-1"
-        >
-          <View className="flex-1">
-            <Pressable
-              className="absolute inset-0 bg-black/45"
-              onPress={closeAnimated}
-              accessibilityLabel="Dismiss chat"
-            />
-            <GestureDetector gesture={panClose}>
-              <Animated.View
-                style={[
-                  {
-                    position: "absolute",
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    width: screenW,
-                  },
-                  animatedSheet,
-                ]}
-                className="bg-zinc-900 border-l border-zinc-800"
-              >
-                <SafeAreaView edges={["top", "bottom"]} className="flex-1">
-                  <ChatDetailContent
-                    target={target}
-                    onClose={closeAnimated}
-                    closeIcon="chevron-back"
-                  />
-                </SafeAreaView>
-              </Animated.View>
-            </GestureDetector>
-          </View>
-        </KeyboardAvoidingView>
+        <View className="flex-1">
+          <Pressable
+            className="absolute inset-0 bg-black/45"
+            onPress={closeAnimated}
+            accessibilityLabel="Dismiss chat"
+          />
+          <GestureDetector gesture={panClose}>
+            <Animated.View
+              style={[
+                {
+                  position: "absolute",
+                  top: 0,
+                  right: 0,
+                  bottom: 0,
+                  width: screenW,
+                },
+                animatedSheet,
+              ]}
+              className="bg-zinc-900 border-l border-zinc-800"
+            >
+              <SafeAreaView edges={["top", "bottom"]} className="flex-1">
+                <ChatDetailContent
+                  target={target}
+                  onClose={closeAnimated}
+                  closeIcon="chevron-back"
+                />
+              </SafeAreaView>
+            </Animated.View>
+          </GestureDetector>
+        </View>
       </GestureHandlerRootView>
     </Modal>
   );

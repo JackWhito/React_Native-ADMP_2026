@@ -1,19 +1,36 @@
 import { useApi } from "@/lib/axios";
+import { useSessionApiReady } from "@/contexts/SessionProfileContext";
+import { useAppAuthed } from "@/hooks/useAppAuthed";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@clerk/expo";
 import type { Chat } from "@/types";
 
 export const useChat = (options?: { enabled?: boolean }) => {
     const {apiWithAuth} = useApi()
-    const { isLoaded, isSignedIn } = useAuth();
+    const { isAuthLoaded, isAuthed } = useAppAuthed();
+    const { isApiReady } = useSessionApiReady();
 
-    return useQuery({
+    return useQuery<Chat[]>({
         queryKey:["conversations"],
         queryFn: async () => {
-            const {data} = await apiWithAuth<Chat[]>({method:"GET", url:"/conversations"})
-            return data as Chat[];
+            const all: Chat[] = [];
+            let cursor: string | undefined;
+            for (let i = 0; i < 50; i += 1) {
+                const { data } = await apiWithAuth<{
+                    conversations: Chat[];
+                    nextCursor: string | null;
+                    hasMore: boolean;
+                }>({
+                    method: "GET",
+                    url: "/conversations",
+                    params: { limit: 100, ...(cursor ? { cursor } : {}) },
+                });
+                all.push(...(data.conversations ?? []));
+                if (!data.hasMore || !data.nextCursor) break;
+                cursor = data.nextCursor;
+            }
+            return all;
         },
-        enabled: Boolean(isLoaded && isSignedIn && (options?.enabled ?? true)),
+        enabled: Boolean(isAuthLoaded && isAuthed && isApiReady && (options?.enabled ?? true)),
         staleTime: 30_000,
         gcTime: 10 * 60_000,
         refetchOnWindowFocus: false,

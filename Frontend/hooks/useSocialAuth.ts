@@ -2,8 +2,10 @@ import { useSSO } from "@clerk/expo";
 import { useState } from "react";
 import { Alert } from "react-native";
 import * as AuthSession from "expo-auth-session";
+import { useLocalAuth } from "@/contexts/LocalAuthContext";
 
 function useAuthSocial() {
+  const { signOutLocal } = useLocalAuth();
   const [loadingStrategy, setLoadingStrategy] = useState<string | null>(null);
   const { startSSOFlow } = useSSO();
 
@@ -15,6 +17,7 @@ function useAuthSocial() {
       const { createdSessionId, setActive } = await startSSOFlow({ strategy, redirectUrl });
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
+        await signOutLocal();
       }
     } catch {
       Alert.alert("Error", "Failed to authenticate with Google. Please try again.");

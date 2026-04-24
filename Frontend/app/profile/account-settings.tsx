@@ -4,17 +4,35 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth, useUser } from "@clerk/expo";
-import { useDeleteAccount, useMyProfile, useUpdateAccountSettings } from "@/hooks/useProfile";
+import { useLocalAuth } from "@/contexts/LocalAuthContext";
+import {
+  useConfirmAccountEmailChange,
+  useDeleteAccount,
+  useMyProfile,
+  useRequestAccountEmailChange,
+  useUpdateAccountSettings,
+  useUpdateLocalAccountPassword,
+} from "@/hooks/useProfile";
 
 type EditableField = "username" | "name" | "email" | null;
 
 export default function AccountSettingsScreen() {
   const router = useRouter();
   const { signOut } = useAuth();
+  const { signOutLocal, persistAppAccessToken } = useLocalAuth();
   const { user } = useUser();
+  const requestEmailChange = useRequestAccountEmailChange();
+  const confirmEmailChange = useConfirmAccountEmailChange();
+  const updateLocalPassword = useUpdateLocalAccountPassword();
+
+  const signOutEverywhere = async () => {
+    await signOutLocal();
+    await signOut();
+  };
   const { data: myProfile } = useMyProfile();
   const updateAccountSettings = useUpdateAccountSettings();
   const deleteAccount = useDeleteAccount();
+  const isEmailAccount = myProfile?.authProvider === "email";
 
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
@@ -65,6 +83,23 @@ export default function AccountSettingsScreen() {
         setEditingValue("");
         return;
       }
+      if (isEmailAccount) {
+        try {
+          setEmailOtpError("");
+          await requestEmailChange.mutateAsync(nextEmail);
+          setPendingEmail(nextEmail);
+          setEmailOtpCode("");
+          setEmailAddressForVerification(null);
+          setEmailOtpStep(true);
+        } catch (error: any) {
+          setEmailOtpError(
+            error?.response?.data?.error ||
+              error?.message ||
+              "Could not send verification code to that email."
+          );
+        }
+        return;
+      }
       const createEmailAddress = (user as any)?.createEmailAddress;
       if (typeof createEmailAddress !== "function") {
         setEmailOtpError("Email verification is unavailable for this account.");
@@ -111,7 +146,36 @@ export default function AccountSettingsScreen() {
   };
 
   const handleVerifyEmailOtp = async () => {
-    if (!emailAddressForVerification || !pendingEmail || !emailOtpCode.trim()) return;
+    if (!emailOtpCode.trim()) {
+      setEmailOtpError("Enter the code from your email.");
+      return;
+    }
+    if (isEmailAccount) {
+      if (!pendingEmail) return;
+      try {
+        setEmailOtpError("");
+        const data = await confirmEmailChange.mutateAsync({
+          newEmail: pendingEmail,
+          otp: emailOtpCode.trim(),
+        });
+        if (data?.accessToken) {
+          await persistAppAccessToken(data.accessToken);
+        }
+        setEmail(pendingEmail);
+        setEditingField(null);
+        setEditingValue("");
+        setEmailOtpStep(false);
+        setPendingEmail("");
+        setEmailOtpCode("");
+        setEmailAddressForVerification(null);
+      } catch (error: any) {
+        setEmailOtpError(
+          error?.response?.data?.error || error?.message || "Could not verify the code."
+        );
+      }
+      return;
+    }
+    if (!emailAddressForVerification || !pendingEmail) return;
     try {
       setEmailOtpError("");
       const verifiedEmail = await emailAddressForVerification.attemptVerification({
@@ -157,6 +221,17 @@ export default function AccountSettingsScreen() {
   };
 
   const handleResendEmailOtp = async () => {
+    if (isEmailAccount && pendingEmail) {
+      try {
+        setEmailOtpError("");
+        await requestEmailChange.mutateAsync(pendingEmail);
+      } catch (error: any) {
+        setEmailOtpError(
+          error?.response?.data?.error || error?.message || "Could not resend the code."
+        );
+      }
+      return;
+    }
     if (!emailAddressForVerification) return;
     try {
       setEmailOtpError("");
@@ -174,8 +249,30 @@ export default function AccountSettingsScreen() {
   const handleChangePassword = async () => {
     const current = currentPassword.trim();
     const next = newPassword.trim();
-    if (!current || !next || !user) return;
+    if (!current || !next) return;
 
+    if (isEmailAccount) {
+      try {
+        setPasswordPending(true);
+        setPasswordError("");
+        const data = await updateLocalPassword.mutateAsync({ currentPassword: current, newPassword: next });
+        if (data?.accessToken) {
+          await persistAppAccessToken(data.accessToken);
+        }
+        setPasswordModalOpen(false);
+        setCurrentPassword("");
+        setNewPassword("");
+      } catch (error: any) {
+        setPasswordError(
+          error?.response?.data?.error || error?.message || "Could not update password."
+        );
+      } finally {
+        setPasswordPending(false);
+      }
+      return;
+    }
+
+    if (!user) return;
     const updatePassword = (user as any)?.updatePassword;
     if (typeof updatePassword !== "function") {
       setPasswordError("Password update is unavailable for this account.");
@@ -204,7 +301,7 @@ export default function AccountSettingsScreen() {
   const handleDeleteAccount = async () => {
     try {
       await deleteAccount.mutateAsync();
-      await signOut();
+      await signOutEverywhere();
       router.replace("/(auth)/signin");
     } catch {
       // Error shown below
@@ -270,7 +367,7 @@ export default function AccountSettingsScreen() {
       <View className="flex-1 justify-end px-4 pb-6">
         <Text className="text-zinc-400 text-xs mb-2">SESSION</Text>
         <Pressable
-          onPress={() => signOut()}
+          onPress={() => void signOutEverywhere()}
           className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 flex-row items-center justify-between"
         >
           <Text className="text-zinc-100 text-sm">Log out</Text>
@@ -326,7 +423,11 @@ export default function AccountSettingsScreen() {
                 <Pressable className="py-3 mt-2 rounded-md active:bg-zinc-800/70" onPress={handleSaveField}>
                   <Text className="text-indigo-300 text-sm font-semibold">
                     {editingField === "email"
-                      ? "Send OTP"
+                      ? requestEmailChange.isPending
+                        ? "Sending..."
+                        : isEmailAccount
+                          ? "Send code"
+                          : "Send OTP"
                       : updateAccountSettings.isPending
                         ? "Saving..."
                         : "Save"}
@@ -350,7 +451,11 @@ export default function AccountSettingsScreen() {
                 />
                 <Pressable className="py-3 mt-2 rounded-md active:bg-zinc-800/70" onPress={handleVerifyEmailOtp}>
                   <Text className="text-indigo-300 text-sm font-semibold">
-                    {updateAccountSettings.isPending ? "Verifying..." : "Verify and save"}
+                    {isEmailAccount && confirmEmailChange.isPending
+                      ? "Verifying..."
+                      : updateAccountSettings.isPending
+                        ? "Verifying..."
+                        : "Verify and save"}
                   </Text>
                 </Pressable>
                 <Pressable className="py-3 rounded-md active:bg-zinc-800/70" onPress={handleResendEmailOtp}>

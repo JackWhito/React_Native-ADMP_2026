@@ -46,5 +46,6 @@ NotificationSchema.index(
   { recipient: 1, sender: 1, server: 1, type: 1, status: 1 },
   { partialFilterExpression: { status: "pending" } }
 );
+NotificationSchema.index({ recipient: 1, createdAt: -1 });
 
 export const Notification = mongoose.model<INotification>("Notification", NotificationSchema);

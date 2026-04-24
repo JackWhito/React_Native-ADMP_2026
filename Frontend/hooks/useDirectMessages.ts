@@ -1,4 +1,7 @@
 import { useApi } from "@/lib/axios";
+import { useSessionApiReady } from "@/contexts/SessionProfileContext";
+import { openSocketWithLanUrls } from "@/lib/openSocketWithLanUrls";
+import { resolveAuthToken } from "@/lib/resolveAuthToken";
 import {
   InfiniteData,
   useInfiniteQuery,
@@ -8,7 +11,7 @@ import {
 import { useAuth } from "@clerk/expo";
 import type { DirectMessage } from "@/types";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { io, type Socket } from "socket.io-client";
+import type { Socket } from "socket.io-client";
 
 const DIRECT_MESSAGES_PAGE_SIZE = 10;
 
@@ -34,14 +37,6 @@ const DIRECT_MESSAGE_REPORT_ENDPOINT = (chatId: string, messageId: string) =>
   `/messages/conversation/${chatId}/${messageId}/report`;
 const DIRECT_MESSAGE_REACTION_ENDPOINT = (chatId: string, messageId: string) =>
   `/messages/conversation/${chatId}/${messageId}/reactions`;
-
-const resolveSocketUrl = () => {
-  const rawBaseUrl =
-    process.env.EXPO_PUBLIC_API_URL ||
-    process.env.EXPO_PUBLIC_BACKEND_URL ||
-    "http://192.168.1.11:5000/api";
-  return rawBaseUrl.replace(/\/api\/?$/, "");
-};
 
 type SocketSendDirectMessageAck = {
   ok: boolean;
@@ -165,11 +160,10 @@ const replaceOptimisticMessageInInfiniteData = (
 export const useDirectMessages = (chatId: string | null | undefined) => {
   const { apiWithAuth } = useApi();
   const { getToken } = useAuth();
+  const { isApiReady } = useSessionApiReady();
   const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
   const getTokenRef = useRef(getToken);
-  const socketUrl = useMemo(() => resolveSocketUrl(), []);
-
   const query = useInfiniteQuery({
     queryKey: chatId ? directMessagesQueryKey(chatId) : (["direct-messages", "empty"] as const),
     queryFn: async ({ pageParam }) => {
@@ -190,7 +184,7 @@ export const useDirectMessages = (chatId: string | null | undefined) => {
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor ?? undefined : undefined),
-    enabled: !!chatId,
+    enabled: Boolean(chatId && isApiReady),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
     refetchOnMount: false,
@@ -207,21 +201,21 @@ export const useDirectMessages = (chatId: string | null | undefined) => {
   );
 
   useEffect(() => {
-    getTokenRef.current = getToken;
+    getTokenRef.current = () => resolveAuthToken(getToken);
   }, [getToken]);
 
   useEffect(() => {
-    if (!chatId) return;
+    if (!chatId || !isApiReady) return;
     let cancelled = false;
+    let closeSocket: (() => void) | null = null;
 
     const connectSocket = async () => {
       const token = await getTokenRef.current();
       if (!token || cancelled) return;
 
-      const socket = io(socketUrl, {
-        transports: ["websocket"],
-        auth: { token },
-      });
+      closeSocket = openSocketWithLanUrls(
+        { transports: ["websocket"], auth: { token } },
+        (socket) => {
       socketRef.current = socket;
 
       socket.on("connect", () => {
@@ -252,20 +246,27 @@ export const useDirectMessages = (chatId: string | null | undefined) => {
           (current) => removeMessageFromInfiniteData(current, deletedId)
         );
       });
+        }
+      );
+      if (cancelled) {
+        closeSocket();
+        closeSocket = null;
+        socketRef.current = null;
+      }
     };
 
-    connectSocket();
+    void connectSocket();
 
     return () => {
       cancelled = true;
       const socket = socketRef.current;
       if (socket) {
         socket.emit("leave-chat", chatId);
-        socket.disconnect();
-        socketRef.current = null;
       }
+      closeSocket?.();
+      socketRef.current = null;
     };
-  }, [chatId, queryClient, socketUrl]);
+  }, [chatId, isApiReady, queryClient]);
 
   const sendViaSocket = useCallback(
     async (input: { content?: string; fileUrl?: string }) => {

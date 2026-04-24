@@ -14,8 +14,11 @@ import ServerDetailPanel from "@/components/ServerDetailPanel";
 import ChatDetailModal from "@/components/ChatDetailModal";
 import type { ChatDetailTarget } from "@/components/ChatDetailContent";
 import { useAuth } from "@clerk/expo";
-import { io, type Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSessionApiReady } from "@/contexts/SessionProfileContext";
+import { useAppAuthed } from "@/hooks/useAppAuthed";
+import { openSocketWithLanUrls } from "@/lib/openSocketWithLanUrls";
+import { resolveAuthToken } from "@/lib/resolveAuthToken";
 
 type DirectMessageDeletedPayload = {
   messageId?: string;
@@ -26,7 +29,9 @@ type DirectMessageDeletedPayload = {
 const ChatTab = () => {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { getToken } = useAuth();
+  const { isAuthLoaded, isAuthed } = useAppAuthed();
+  const { isApiReady } = useSessionApiReady();
   const { data: conversations, isLoading, error } = useChat();
   const { data: servers } = useServers();
   const { data: myProfile } = useMyProfile();
@@ -38,44 +43,34 @@ const ChatTab = () => {
   const getTokenRef = React.useRef(getToken);
   const onlineProfileIdSet = useMemo(() => new Set(onlineProfileIds.map(String)), [onlineProfileIds]);
 
-  const socketUrl = useMemo(() => {
-    const rawBaseUrl =
-      process.env.EXPO_PUBLIC_API_URL ||
-      process.env.EXPO_PUBLIC_BACKEND_URL ||
-      "http://192.168.1.11:5000/api";
-    return rawBaseUrl.replace(/\/api\/?$/, "");
-  }, []);
-
   useEffect(() => {
-    getTokenRef.current = getToken;
+    getTokenRef.current = () => resolveAuthToken(getToken);
   }, [getToken]);
 
   useEffect(() => {
     if (!selectedServer?._id) return;
-    const stillExists = (servers ?? []).some((s) => String(s._id) === String(selectedServer._id));
+    const stillExists = (servers ?? []).some((s: Server) => String(s._id) === String(selectedServer._id));
     if (!stillExists) {
       setSelectedServer(null);
     }
   }, [selectedServer, servers]);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) {
+    if (!isAuthLoaded || !isAuthed || !isApiReady) {
       setOnlineProfileIds((current) => (current.length === 0 ? current : []));
       return;
     }
 
     let cancelled = false;
-    let socket: Socket | null = null;
+    let closeSocket: (() => void) | null = null;
 
     const connectSocket = async () => {
       const token = await getTokenRef.current();
       if (!token || cancelled) return;
 
-      socket = io(socketUrl, {
-        transports: ["websocket"],
-        auth: { token },
-      });
-
+      closeSocket = openSocketWithLanUrls(
+        { transports: ["websocket"], auth: { token } },
+        (socket) => {
       socket.on("online-users", (payload: { usersId?: string[] }) => {
         const ids = Array.isArray(payload?.usersId) ? payload.usersId.map(String) : [];
         setOnlineProfileIds((current) => {
@@ -170,15 +165,21 @@ const ChatTab = () => {
           return [updated, ...current.filter((item) => String(item._id) !== conversationId)];
         });
       });
+        }
+      );
+      if (cancelled) {
+        closeSocket();
+        closeSocket = null;
+      }
     };
 
-    connectSocket();
+    void connectSocket();
 
     return () => {
       cancelled = true;
-      socket?.disconnect();
+      closeSocket?.();
     };
-  }, [isLoaded, isSignedIn, queryClient, socketUrl]);
+  }, [isApiReady, isAuthLoaded, isAuthed, queryClient]);
 
   const openChatModal = useCallback((t: ChatDetailTarget) => {
     setLastOpenedChat(t);

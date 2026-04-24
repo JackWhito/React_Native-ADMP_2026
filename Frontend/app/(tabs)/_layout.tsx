@@ -3,18 +3,20 @@ import React, { useEffect } from 'react'
 import { router, Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/expo';
+import { useAppAuthed } from '@/hooks/useAppAuthed';
 import { useNotifications } from '@/hooks/useNotification';
 
 const TabsLayout = () => {
-  const { isSignedIn, isLoaded} = useAuth();
+  const { isLoaded } = useAuth();
+  const { isAuthLoaded, isAuthed } = useAppAuthed();
   const { data: notifications } = useNotifications();
   const hasNotifications = (notifications ?? []).some((n) => !n.isRead);
 
   useEffect(() => {
-    if(!isSignedIn) router.replace("/(auth)/signin")
-  },[isSignedIn]);
+    if (isAuthLoaded && !isAuthed) router.replace("/(auth)/signin")
+  },[isAuthed, isAuthLoaded]);
 
-  if(!isLoaded) return null;
+  if(!isLoaded || !isAuthLoaded) return null;
 
   return (
     <View style={{ marginTop: 40, flex: 1, flexDirection: 'row' }} >

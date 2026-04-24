@@ -1,7 +1,12 @@
 import mongoose, {Schema, type Document} from "mongoose";
 
 export interface IProfile extends Document {
-    clerkId: string;
+    /** Present for OAuth (Clerk). Omitted for email/password accounts. */
+    clerkId?: string;
+    /** How this row was created; `email` = password + app JWT, no Clerk user. */
+    authProvider: "clerk" | "email";
+    /** bcrypt hash for `authProvider === "email"` (not selected by default). */
+    passwordHash?: string;
     name: string;
     username?: string;
     bio?: string;
@@ -18,7 +23,9 @@ export interface IProfile extends Document {
     updatedAt: Date;
 }
 const ProfileSchema = new Schema<IProfile>({
-    clerkId: { type: String, required: true, unique: true },
+    clerkId: { type: String, required: false, unique: true, sparse: true, trim: true },
+    authProvider: { type: String, enum: ["clerk", "email"], default: "clerk", index: true },
+    passwordHash: { type: String, required: false, select: false },
     name: { type: String, required: true, trim: true },
     username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     bio: { type: String, default: "", trim: true, maxlength: 300 },

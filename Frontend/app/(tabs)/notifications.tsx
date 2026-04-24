@@ -49,6 +49,9 @@ export default function NotificationsTab() {
     channelId?: string;
     channelName?: string;
   }) => {
+    // Mark read for every open path (early returns below used to skip this entirely).
+    markAsRead.mutate(String(notificationId));
+
     if (input.channelId && input.serverId) {
       router.push({
         pathname: "/chat/[id]",
@@ -72,8 +75,6 @@ export default function NotificationsTab() {
         },
       });
     }
-    // Fire-and-forget read update so navigation is instant.
-    markAsRead.mutate(notificationId);
   }, [markAsRead, router]);
 
   const renderNotificationItem = useCallback(({ item: n }: { item: any }) => (

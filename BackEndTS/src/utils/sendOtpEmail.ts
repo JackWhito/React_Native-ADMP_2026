@@ -2,7 +2,12 @@ import nodemailer from "nodemailer";
 
 const SUBJECT_REGISTER = "Your admin verification code";
 
-export type OtpEmailKind = "registration" | "password_reset";
+export type OtpEmailKind =
+    | "registration"
+    | "password_reset"
+    | "app_password_reset"
+    | "app_signup"
+    | "app_email_change";
 
 /**
  * Sends a one-time code using `EMAIL_USER` / `EMAIL_PASS` from `.env` (Gmail SMTP).
@@ -29,14 +34,34 @@ export async function sendOtpEmail(
         auth: { user, pass },
     });
 
-    const isReset = kind === "password_reset";
-    const subject = isReset ? "Reset your admin password" : SUBJECT_REGISTER;
-    const text = isReset
-        ? `Your password reset code is ${otp}. It expires in 15 minutes. If you did not request a reset, you can ignore this email.`
-        : `Your verification code is ${otp}. It expires in 15 minutes. If you did not request this, you can ignore this email.`;
-    const html = isReset
-        ? `<p>Your password reset code is <strong>${otp}</strong>.</p><p>It expires in 15 minutes.</p><p>If you did not request a reset, you can ignore this email.</p>`
-        : `<p>Your verification code is <strong>${otp}</strong>.</p><p>It expires in 15 minutes.</p><p>If you did not request this, you can ignore this email.</p>`;
+    const isAdminReset = kind === "password_reset";
+    const isAppReset = kind === "app_password_reset";
+    const isAppSignup = kind === "app_signup";
+    const isAppEmailChange = kind === "app_email_change";
+    const isReset = isAdminReset || isAppReset;
+    const subject = isAppEmailChange
+        ? "Your email change verification code"
+        : isAppSignup
+          ? "Verify your new account"
+          : isAppReset
+            ? "Your password reset code"
+            : isAdminReset
+              ? "Reset your admin password"
+              : SUBJECT_REGISTER;
+    const text = isAppEmailChange
+        ? `Your email change verification code is ${otp}. It expires in 15 minutes. If you did not request this change, you can ignore this email.`
+        : isAppSignup
+          ? `Your sign-up verification code is ${otp}. It expires in 15 minutes. If you did not create an account, you can ignore this email.`
+          : isReset
+            ? `Your password reset code is ${otp}. It expires in 15 minutes. If you did not request a reset, you can ignore this email.`
+            : `Your verification code is ${otp}. It expires in 15 minutes. If you did not request this, you can ignore this email.`;
+    const html = isAppEmailChange
+        ? `<p>Your email change verification code is <strong>${otp}</strong>.</p><p>It expires in 15 minutes.</p><p>If you did not request this change, you can ignore this email.</p>`
+        : isAppSignup
+          ? `<p>Your sign-up verification code is <strong>${otp}</strong>.</p><p>It expires in 15 minutes.</p><p>If you did not create an account, you can ignore this email.</p>`
+          : isReset
+            ? `<p>Your password reset code is <strong>${otp}</strong>.</p><p>It expires in 15 minutes.</p><p>If you did not request a reset, you can ignore this email.</p>`
+            : `<p>Your verification code is <strong>${otp}</strong>.</p><p>It expires in 15 minutes.</p><p>If you did not request this, you can ignore this email.</p>`;
 
     await transporter.sendMail({
         from: user,

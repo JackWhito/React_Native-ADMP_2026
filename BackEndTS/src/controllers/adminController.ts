@@ -22,6 +22,7 @@ import { signAdminToken } from "../utils/adminJwt";
 import { hashAdminPassword, verifyAdminPassword } from "../utils/adminPassword";
 import { sendOtpEmail } from "../utils/sendOtpEmail";
 import { emitAdminDataChanged } from "../utils/socket";
+import { invalidateAuthProfileCacheAfterSave } from "../utils/profileAuthCache";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
@@ -166,6 +167,7 @@ async function hardDeleteProfileById(profileId: mongoose.Types.ObjectId): Promis
         Channel.updateMany({ profile: profileId }, { $pull: { profile: profileId } }),
     ]);
 
+    invalidateAuthProfileCacheAfterSave(profile);
     await Profile.deleteOne({ _id: profileId });
     await AdminProfileDeletionRequest.deleteOne({ profile: profileId });
 }
@@ -696,6 +698,7 @@ export async function updateProfileAsAdmin(req: Request, res: Response, next: Ne
         profile.email = email;
         profile.bio = bio;
         await profile.save();
+        invalidateAuthProfileCacheAfterSave(profile);
         res.status(200).json({
             profile: {
                 id: String(profile._id),
@@ -800,6 +803,7 @@ export async function assignProfileRole(req: Request, res: Response, next: NextF
         }
         profile.role = role as "user" | "moderator" | "admin";
         await profile.save();
+        invalidateAuthProfileCacheAfterSave(profile);
         res.status(200).json({ updated: true, role: profile.role });
         emitAdminDataChanged(["profiles"]);
     } catch (error) {
@@ -847,6 +851,7 @@ export async function moderateProfile(req: Request, res: Response, next: NextFun
             profile.sessionVersion = (profile.sessionVersion ?? 1) + 1;
         }
         await profile.save();
+        invalidateAuthProfileCacheAfterSave(profile);
         res.status(200).json({
             updated: true,
             moderationStatus: profile.moderationStatus,
@@ -875,6 +880,7 @@ export async function forceLogoutProfile(req: Request, res: Response, next: Next
         profile.forceLogoutAfter = new Date();
         profile.sessionVersion = (profile.sessionVersion ?? 1) + 1;
         await profile.save();
+        invalidateAuthProfileCacheAfterSave(profile);
         res.status(200).json({
             forced: true,
             forceLogoutAfter:
@@ -1564,39 +1570,109 @@ export async function getServerDetail(req: Request, res: Response, next: NextFun
                 .lean(),
             Channel.find({ server: _id }).sort({ createdAt: -1 }).lean(),
         ]);
-        const channelDetails = await Promise.all(
-            channels.map(async (c) => {
-                const msgs = await Message.find({ channel: c._id })
-                    .sort({ createdAt: -1 })
-                    .limit(5)
-                    .populate("member", "name username email imageUrl")
-                    .lean();
-                return {
-                    id: String(c._id),
-                    name: c.name,
-                    type: c.type,
-                    participantsCount: Array.isArray(c.profile) ? c.profile.length : 0,
-                    recentMessages: msgs.map((m) => {
-                        const member = m.member as
-                            | { _id?: unknown; name?: string; username?: string; email?: string; imageUrl?: string }
-                            | undefined;
-                        return {
-                            id: String(m._id),
-                            content: m.deleted ? "[deleted]" : m.content ?? "",
-                            createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : "",
-                            deleted: Boolean(m.deleted),
-                            member: {
-                                id: member?._id ? String(member._id) : "",
-                                name: member?.name ?? "",
-                                username: member?.username ?? "",
-                                email: member?.email ?? "",
-                                imageUrl: member?.imageUrl ?? "",
-                            },
-                        };
-                    }),
+        const channelObjectIds = channels.map((c) => c._id);
+        const recentByChannel = new Map<
+            string,
+            Array<{
+                _id: unknown;
+                content?: string;
+                deleted: boolean;
+                createdAt: Date;
+                member?: {
+                    _id?: unknown;
+                    name?: string;
+                    username?: string;
+                    email?: string;
+                    imageUrl?: string;
                 };
-            })
-        );
+            }>
+        >();
+        if (channelObjectIds.length) {
+            const profileColl = Profile.collection.name;
+            const withRank = await Message.aggregate<{
+                _id: unknown;
+                channel: mongoose.Types.ObjectId;
+                content?: string;
+                deleted: boolean;
+                createdAt: Date;
+                n: number;
+                mp: {
+                    _id?: unknown;
+                    name?: string;
+                    username?: string;
+                    email?: string;
+                    imageUrl?: string;
+                } | null;
+            }>([
+                { $match: { channel: { $in: channelObjectIds } } },
+                {
+                    $setWindowFields: {
+                        partitionBy: "$channel",
+                        sortBy: { createdAt: -1 },
+                        output: { n: { $documentNumber: {} } },
+                    },
+                },
+                { $match: { n: { $lte: 5 } } },
+                {
+                    $lookup: {
+                        from: profileColl,
+                        localField: "member",
+                        foreignField: "_id",
+                        as: "mp",
+                    },
+                },
+                { $unwind: { path: "$mp", preserveNullAndEmptyArrays: true } },
+                { $sort: { channel: 1, createdAt: -1 } },
+            ]);
+            for (const row of withRank) {
+                const key = String(row.channel);
+                if (!recentByChannel.has(key)) {
+                    recentByChannel.set(key, []);
+                }
+                const prof = row.mp;
+                const member = prof
+                    ? {
+                        _id: prof._id,
+                        name: prof.name,
+                        username: prof.username,
+                        email: prof.email,
+                        imageUrl: prof.imageUrl,
+                    }
+                    : undefined;
+                recentByChannel.get(key)!.push({
+                    _id: row._id,
+                    content: row.content,
+                    deleted: Boolean(row.deleted),
+                    createdAt: row.createdAt,
+                    member,
+                });
+            }
+        }
+        const channelDetails = channels.map((c) => {
+            const msgs = recentByChannel.get(String(c._id)) ?? [];
+            return {
+                id: String(c._id),
+                name: c.name,
+                type: c.type,
+                participantsCount: Array.isArray(c.profile) ? c.profile.length : 0,
+                recentMessages: msgs.map((m) => {
+                    const member = m.member;
+                    return {
+                        id: String(m._id),
+                        content: m.deleted ? "[deleted]" : m.content ?? "",
+                        createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : "",
+                        deleted: Boolean(m.deleted),
+                        member: {
+                            id: member?._id != null ? String(member._id) : "",
+                            name: member?.name ?? "",
+                            username: member?.username ?? "",
+                            email: member?.email ?? "",
+                            imageUrl: member?.imageUrl ?? "",
+                        },
+                    };
+                }),
+            };
+        });
         const createdBy = server.createdBy as { name?: string; email?: string } | undefined;
         const members = memberRows.map((m) => ({
             id: String(m._id),

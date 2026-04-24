@@ -20,4 +20,6 @@ const ServerSchema = new Schema<IServer>({
     admins: [{ type: Schema.Types.ObjectId, ref: "Profile", required: true }],
 }, { timestamps: true });
 
+ServerSchema.index({ participants: 1 });
+
 export const Server = mongoose.model('Server', ServerSchema);

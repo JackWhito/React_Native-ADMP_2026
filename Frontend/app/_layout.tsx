@@ -1,6 +1,8 @@
 import { Stack } from "expo-router";
 import "@/global.css";
 import {QueryClient, QueryClientProvider} from "@tanstack/react-query"
+import { LocalAuthProvider, useLocalAuth } from "@/contexts/LocalAuthContext";
+import { SessionProfileProvider, useSessionApiReady } from "@/contexts/SessionProfileContext";
 import AuthSync from "@/components/AuthSync";
 import AppBootstrapSplash from "@/components/AppBootstrapSplash";
 import { ClerkProvider, useAuth } from "@clerk/expo";
@@ -32,8 +34,11 @@ if (!publishableKey) {
 
 function AppShell() {
   const { isLoaded, isSignedIn } = useAuth();
+  const { isLocalAuthed, isHydrated: localReady } = useLocalAuth();
+  const { isApiReady, isError: sessionBootstrapError } = useSessionApiReady();
   const [showSplash, setShowSplash] = useState(true);
-  const shouldLoadBootstrapData = !!(isLoaded && isSignedIn);
+  const isAuthed = isLocalAuthed || isSignedIn;
+  const shouldLoadBootstrapData = !!(isLoaded && localReady && isAuthed && isApiReady);
   const serversQuery = useServers({ enabled: shouldLoadBootstrapData });
   const conversationsQuery = useChat({ enabled: shouldLoadBootstrapData });
 
@@ -43,7 +48,12 @@ function AppShell() {
       return;
     }
 
-    if (!isSignedIn) {
+    if (!isLocalAuthed && !isSignedIn) {
+      setShowSplash(false);
+      return;
+    }
+
+    if (sessionBootstrapError) {
       setShowSplash(false);
       return;
     }
@@ -64,7 +74,10 @@ function AppShell() {
     setShowSplash(!(serversReady && conversationsReady));
   }, [
     isLoaded,
+    isLocalAuthed,
     isSignedIn,
+    isApiReady,
+    sessionBootstrapError,
     serversQuery.isLoading,
     serversQuery.isPending,
     serversQuery.isFetched,
@@ -144,7 +157,11 @@ export default function RootLayout() {
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
     <QueryClientProvider client={queryClient}>
-          <AppShell />
+          <LocalAuthProvider>
+            <SessionProfileProvider>
+              <AppShell />
+            </SessionProfileProvider>
+          </LocalAuthProvider>
     </QueryClientProvider>
     </ClerkProvider>
   );

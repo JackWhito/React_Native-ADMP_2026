@@ -1,23 +1,29 @@
-import { useAuthCallback } from "@/hooks/useAuth";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import { useAuth, useUser } from "@clerk/expo";
+import { useAuth } from "@clerk/expo";
+import { useLocalAuth } from "@/contexts/LocalAuthContext";
 
 const AuthSync = () => {
-  const { isLoaded, isSignedIn } = useAuth();
-  const { user } = useUser();
-  const { mutateAsync: syncUser } = useAuthCallback();
-  const hasSynced = useRef(false);
+  const { isLoaded, isSignedIn, userId } = useAuth();
+  const { isHydrated: localReady, isLocalAuthed } = useLocalAuth();
+  const queryClient = useQueryClient();
+  const previousUserId = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
-    if (!isLoaded) return;
-    if (isSignedIn && user && !hasSynced.current) {
-      hasSynced.current = true;
-      syncUser().catch(() => {});
+    if (!isLoaded || !localReady) return;
+    const isAuthed = isLocalAuthed || isSignedIn;
+    if (!isAuthed) {
+      queryClient.clear();
+      previousUserId.current = null;
+      return;
     }
-    if (!isSignedIn) {
-      hasSynced.current = false;
+    if (isSignedIn && userId) {
+      if (previousUserId.current && previousUserId.current !== userId) {
+        queryClient.clear();
+      }
+      previousUserId.current = userId;
     }
-  }, [isLoaded, isSignedIn, user, syncUser]);
+  }, [isLoaded, localReady, isLocalAuthed, isSignedIn, userId, queryClient]);
 
   return null;
 };

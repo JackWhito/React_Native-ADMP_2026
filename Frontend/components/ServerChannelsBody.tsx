@@ -47,6 +47,19 @@ type SimpleDialogState = {
   message: string;
 };
 
+const REPORT_SERVER_REASON_TEXT: Record<
+  "spam" | "harassment" | "hate" | "nudity" | "violence" | "scam" | "other",
+  string
+> = {
+  spam: "Spam or misleading content",
+  harassment: "Harassment or bullying",
+  hate: "Hate speech or symbols",
+  nudity: "Nudity or sexual content",
+  violence: "Violence or dangerous content",
+  scam: "Scam, fraud, or phishing",
+  other: "Other community guideline violation",
+};
+
 function ChannelRow({
   channel,
   onChannelPress,
@@ -276,19 +289,6 @@ export default function ServerChannelsBody({
     setSearchText("");
   }, []);
 
-  const reportReasonText: Record<
-    "spam" | "harassment" | "hate" | "nudity" | "violence" | "scam" | "other",
-    string
-  > = {
-    spam: "Spam or misleading content",
-    harassment: "Harassment or bullying",
-    hate: "Hate speech or symbols",
-    nudity: "Nudity or sexual content",
-    violence: "Violence or dangerous content",
-    scam: "Scam, fraud, or phishing",
-    other: "Other community guideline violation",
-  };
-
   const handleSearchChannels = useCallback(() => {
     setSearchModalOpen(true);
   }, []);
@@ -456,7 +456,7 @@ export default function ServerChannelsBody({
       const response = await reportServer.mutateAsync({
         serverId,
         category: reportServerCategory,
-        reason: reportReasonText[reportServerCategory],
+        reason: REPORT_SERVER_REASON_TEXT[reportServerCategory],
       });
       setReportServerModalOpen(false);
       showDialog(
@@ -467,7 +467,7 @@ export default function ServerChannelsBody({
       const message = error?.response?.data?.error ?? error?.message ?? "Could not report server.";
       showDialog("Report failed", String(message));
     }
-  }, [reportReasonText, reportServer, reportServerCategory, serverId, showDialog]);
+  }, [reportServer, reportServerCategory, serverId, showDialog]);
 
   const handleKickGuest = useCallback(
     (memberId: string, memberName: string) => {
@@ -773,7 +773,8 @@ export default function ServerChannelsBody({
             <Text className="text-zinc-400 text-xs mb-3">
               Select a reason. This helps moderators review faster.
             </Text>
-            {(Object.keys(reportReasonText) as Array<keyof typeof reportReasonText>).map((category) => {
+            {(Object.keys(REPORT_SERVER_REASON_TEXT) as (keyof typeof REPORT_SERVER_REASON_TEXT)[]).map(
+              (category) => {
               const selected = reportServerCategory === category;
               return (
                 <Pressable
@@ -784,11 +785,12 @@ export default function ServerChannelsBody({
                   }`}
                 >
                   <Text className={`text-sm ${selected ? "text-orange-200" : "text-zinc-100"}`}>
-                    {reportReasonText[category]}
+                    {REPORT_SERVER_REASON_TEXT[category]}
                   </Text>
                 </Pressable>
               );
-            })}
+            }
+            )}
             <Pressable
               onPress={() => {
                 void handleSubmitServerReport();
