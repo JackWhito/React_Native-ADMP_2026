@@ -2,9 +2,27 @@ import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from "axio
 import * as SecureStore from "expo-secure-store";
 import { useAuth } from "@clerk/expo";
 import { useCallback } from "react";
+import { Alert } from "react-native";
 import { APP_JWT_STORE_KEY } from "@/lib/appJwtStorageKey";
+import { notifyAuthInvalidated } from "@/lib/authInvalidation";
 
 const getAppJwtFromStore = () => SecureStore.getItemAsync(APP_JWT_STORE_KEY);
+let lastApiWarningAt = 0;
+let lastApiWarningMessage = "";
+const API_WARNING_COOLDOWN_MS = 2500;
+
+const warnApiError = (message: string) => {
+  const now = Date.now();
+  if (
+    now - lastApiWarningAt < API_WARNING_COOLDOWN_MS &&
+    lastApiWarningMessage === message
+  ) {
+    return;
+  }
+  lastApiWarningAt = now;
+  lastApiWarningMessage = message;
+  Alert.alert("Warning", message);
+};
 
 /**
  * When `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_BACKEND_URL` are unset: REST uses the
@@ -82,7 +100,7 @@ export const getApiSocketOrigin = () => getApiSocketConnectUrls()[0] ?? "";
 const attachResponseHandlers = (client: AxiosInstance) => {
   client.interceptors.response.use(
     (response) => response,
-    (error) => {
+    async (error) => {
       const config = error.config as
         | (InternalAxiosRequestConfig & { _lanApiFallbackTried?: boolean })
         | undefined;
@@ -114,6 +132,16 @@ const attachResponseHandlers = (client: AxiosInstance) => {
 
         if (isExpectedMissingServerAfterDelete) {
           return Promise.reject(error);
+        }
+
+        if (status === 401 && error.config?.headers?.Authorization) {
+          await notifyAuthInvalidated("unauthorized");
+        } else {
+          const apiMessage =
+            String(error.response?.data?.error ?? "") ||
+            String(error.response?.data?.message ?? "");
+          const warningMessage = apiMessage.trim() || `Request failed (${status}). Please try again.`;
+          warnApiError(warningMessage);
         }
 
         console.error(

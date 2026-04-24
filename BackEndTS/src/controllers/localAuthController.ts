@@ -111,7 +111,7 @@ export async function completeEmailRegistration(req: Request, res: Response): Pr
             name: pending.name,
             username,
             bio: "",
-            imageUrl: "",
+            imageUrl: "https://via.placeholder.com/150",
             passwordHash: pending.passwordHash,
         });
         await LocalEmailSignupPending.deleteMany({ email });

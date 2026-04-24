@@ -37,15 +37,16 @@ export default function Profile() {
   const avatarSrc = remoteImageSource(resolvedAvatarUrl);
   const canRemoveAvatar = useMemo(() => Boolean(resolvedAvatarUrl), [resolvedAvatarUrl]);
   const joinedSinceLabel = useMemo(() => {
-    if (!user?.createdAt) return "Unknown";
-    const date = new Date(user.createdAt);
+    const createdAt = myProfile?.createdAt || user?.createdAt;
+    if (!createdAt) return "Unknown";
+    const date = new Date(createdAt);
     if (Number.isNaN(date.getTime())) return "Unknown";
     return date.toLocaleDateString("en-GB", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
-  }, [user?.createdAt]);
+  }, [user?.createdAt, myProfile?.createdAt]);
   const friendCount = conversations?.length ?? 0;
 
   const openAccountSettings = () => {

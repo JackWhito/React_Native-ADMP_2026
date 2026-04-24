@@ -3,6 +3,7 @@ import { useClerk, useAuth } from "@clerk/expo";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "@/lib/axios";
 import { APP_JWT_STORE_KEY } from "@/lib/appJwtStorageKey";
+import { setAuthInvalidationHandler } from "@/lib/authInvalidation";
 import * as SecureStore from "expo-secure-store";
 
 type LocalAuthContextValue = {
@@ -56,6 +57,15 @@ export function LocalAuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(null);
     queryClient.clear();
   }, [queryClient]);
+
+  const signOutEverywhere = useCallback(async () => {
+    await SecureStore.deleteItemAsync(APP_JWT_STORE_KEY);
+    setAccessToken(null);
+    if (isSignedIn) {
+      await signOut();
+    }
+    queryClient.clear();
+  }, [isSignedIn, queryClient, signOut]);
 
   const persistAppAccessToken = useCallback(
     async (token: string) => {
@@ -121,6 +131,15 @@ export function LocalAuthProvider({ children }: { children: ReactNode }) {
     },
     [isSignedIn, queryClient, signOut]
   );
+
+  useEffect(() => {
+    setAuthInvalidationHandler(async () => {
+      await signOutEverywhere();
+    });
+    return () => {
+      setAuthInvalidationHandler(null);
+    };
+  }, [signOutEverywhere]);
 
   const value = useMemo<LocalAuthContextValue>(
     () => ({
